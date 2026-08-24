@@ -27,6 +27,14 @@ This file is the source of truth for future coding sessions. Read it before chan
 - `acceptAgreement` is implemented in Member A's foundation only because funding depends on it. Member B owns its final UI and acceptance experience.
 - Shared changes to enums, structs, events, or public function signatures require coordination because they alter the ABI.
 
+## Current implementation status
+
+- Member A's reviewed foundation and Member B's Carrier milestone module are implemented.
+- The Carrier entry point is `submitMilestoneProof(agreementId, milestoneType, proofCode)`; keep proof verification and payout in one atomic transaction.
+- Pickup uses basis-point integer division. Delivery always receives `requiredEscrow - releasedAmount`, including any rounding remainder.
+- The React event timeline queries contract logs directly. Do not replace it with locally fabricated records or persistent off-chain storage.
+- A local redeployment regenerates `frontend/src/contracts/deployment.json`; old local-chain agreements do not survive a Hardhat node restart.
+
 ## Contract invariants
 
 - Agreement IDs start at 1 and must be validated before access.
@@ -56,6 +64,6 @@ This file is the source of truth for future coding sessions. Read it before chan
 
 ## Git workflow
 
-- Member A works on `feature/shipper-escrow`; Member B should branch from the reviewed foundation for `feature/carrier-milestones`.
+- Member A worked on `feature/shipper-escrow`; Member B works from the reviewed foundation on `feature/carrier-milestones`.
 - Keep `main` stable. Use focused commits and pull requests; do not commit private keys, seed phrases, `.env` files, build artifacts, or `node_modules`.
 - Do not merge a public ABI change until both members understand and approve it.
