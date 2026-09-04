@@ -2,8 +2,10 @@ import { formatEther } from "ethers";
 
 const AGREEMENT_EVENT_NAMES = [
   "AgreementCreated",
+  "AgreementVerifierAssigned",
   "AgreementAccepted",
   "AgreementFunded",
+  "MilestoneEvidenceSubmitted",
   "MilestoneVerified",
   "EscrowReleased",
   "AgreementCompleted",
@@ -25,14 +27,22 @@ function describeEvent(log) {
         title: "Agreement created",
         detail: `${formatEther(args.requiredEscrow)} ETH proposed for escrow.`,
       };
+    case "AgreementVerifierAssigned":
+      return { title: "Verifier nominated", detail: "The Shipper assigned an independent Verifier to this agreement." };
     case "AgreementAccepted":
       return { title: "Carrier accepted", detail: "The Carrier accepted the delivery assignment." };
     case "AgreementFunded":
       return { title: "Escrow funded", detail: `${formatEther(args.amount)} ETH locked in the contract.` };
+    case "MilestoneEvidenceSubmitted":
+      return {
+        title: `${milestoneName(args.milestone)} evidence submitted`,
+        detail: "The Carrier recorded an IPFS content identifier for Verifier review.",
+        evidenceCid: args.evidenceCid,
+      };
     case "MilestoneVerified":
       return {
-        title: `${milestoneName(args.milestone)} proof verified`,
-        detail: "The submitted code matched the proof hash stored on-chain.",
+        title: `${milestoneName(args.milestone)} approved by Verifier`,
+        detail: "The nominated Verifier reviewed the evidence and supplied the matching one-time code.",
       };
     case "EscrowReleased":
       return {
@@ -69,7 +79,7 @@ export async function loadAgreementHistory(contract, agreementIds) {
   const timestamps = new Map(blocks.map((block) => [block.number, block.timestamp]));
 
   return logs
-    .sort((left, right) => right.blockNumber - left.blockNumber || right.index - left.index)
+    .sort((left, right) => left.blockNumber - right.blockNumber || left.index - right.index)
     .map((log) => ({
       key: `${log.transactionHash}-${log.index}`,
       agreementId: log.args.agreementId.toString(),

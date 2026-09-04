@@ -6,6 +6,7 @@ interface IProofRouteEscrowHarness {
 
     function createAgreement(
         address carrier,
+        address verifier,
         string calldata cargo,
         string calldata origin,
         string calldata destination,
@@ -39,6 +40,7 @@ contract RefundReceiverHarness {
 
     function create(
         address carrier,
+        address verifier,
         uint256 requiredEscrow,
         uint64 deadline,
         bytes32 pickupProofHash,
@@ -46,6 +48,7 @@ contract RefundReceiverHarness {
     ) external {
         agreementId = escrow.createAgreement(
             carrier,
+            verifier,
             "Test cargo",
             "Test origin",
             "Test destination",

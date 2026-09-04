@@ -4,7 +4,7 @@ import { network } from "hardhat";
 const { ethers, networkHelpers } = await network.create();
 const { loadFixture, time } = networkHelpers;
 
-const Role = Object.freeze({ None: 0n, Shipper: 1n, Carrier: 2n });
+const Role = Object.freeze({ None: 0n, Shipper: 1n, Carrier: 2n, Verifier: 3n });
 const Status = Object.freeze({
   Created: 0n,
   Accepted: 1n,
@@ -22,26 +22,28 @@ const PICKUP_HASH = ethers.id("pickup-secret");
 const DELIVERY_HASH = ethers.id("delivery-secret");
 
 async function deployFixture() {
-  const [deployer, shipper, carrier, stranger, secondCarrier] = await ethers.getSigners();
+  const [deployer, shipper, carrier, verifier, stranger, secondCarrier, secondVerifier] = await ethers.getSigners();
   const contract = await ethers.deployContract("ProofRouteEscrow");
   await contract.waitForDeployment();
 
-  return { contract, deployer, shipper, carrier, stranger, secondCarrier };
+  return { contract, deployer, shipper, carrier, verifier, stranger, secondCarrier, secondVerifier };
 }
 
-async function registerParties(contract, shipper, carrier) {
+async function registerParties(contract, shipper, carrier, verifier) {
   await contract.connect(shipper).registerUser("Alice Shipper", Role.Shipper);
   await contract.connect(carrier).registerUser("Chris Carrier", Role.Carrier);
+  await contract.connect(verifier).registerUser("Vera Verifier", Role.Verifier);
 }
 
 async function futureDeadline(seconds = 3_600) {
   return BigInt(await time.latest()) + BigInt(seconds);
 }
 
-async function createAgreement(contract, shipper, carrier, overrides = {}) {
+async function createAgreement(contract, shipper, carrier, verifier, overrides = {}) {
   const deadline = overrides.deadline ?? (await futureDeadline());
   await contract.connect(shipper).createAgreement(
     overrides.carrier ?? carrier.address,
+    overrides.verifier ?? verifier.address,
     overrides.cargo ?? "Medical supplies",
     overrides.origin ?? "Kuala Lumpur",
     overrides.destination ?? "Penang",
@@ -56,8 +58,13 @@ async function createAgreement(contract, shipper, carrier, overrides = {}) {
 
 async function acceptedAgreementFixture() {
   const fixture = await deployFixture();
-  await registerParties(fixture.contract, fixture.shipper, fixture.carrier);
-  const deadline = await createAgreement(fixture.contract, fixture.shipper, fixture.carrier);
+  await registerParties(fixture.contract, fixture.shipper, fixture.carrier, fixture.verifier);
+  const deadline = await createAgreement(
+    fixture.contract,
+    fixture.shipper,
+    fixture.carrier,
+    fixture.verifier,
+  );
   await fixture.contract.connect(fixture.carrier).acceptAgreement(1);
   return { ...fixture, deadline };
 }
@@ -70,15 +77,17 @@ async function fundedAgreementFixture() {
 
 describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
   describe("registration", function () {
-    it("registers shipper and carrier wallets and emits an audit event", async function () {
-      const { contract, shipper, carrier } = await loadFixture(deployFixture);
+    it("registers shipper, carrier, and verifier wallets and emits an audit event", async function () {
+      const { contract, shipper, carrier, verifier } = await loadFixture(deployFixture);
 
       await expect(contract.connect(shipper).registerUser("Alice Shipper", Role.Shipper))
         .to.emit(contract, "UserRegistered");
       await contract.connect(carrier).registerUser("Chris Carrier", Role.Carrier);
+      await contract.connect(verifier).registerUser("Vera Verifier", Role.Verifier);
 
       expect((await contract.getUser(shipper.address)).role).to.equal(Role.Shipper);
       expect((await contract.getUser(carrier.address)).role).to.equal(Role.Carrier);
+      expect((await contract.getUser(verifier.address)).role).to.equal(Role.Verifier);
     });
 
     it("rejects duplicate registration", async function () {
@@ -101,14 +110,15 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
   });
 
   describe("agreement creation", function () {
-    it("stores agreement, milestone allocation, and both users' indexes", async function () {
-      const { contract, shipper, carrier } = await loadFixture(deployFixture);
-      await registerParties(contract, shipper, carrier);
+    it("stores agreement, milestone allocation, and all participants' indexes", async function () {
+      const { contract, shipper, carrier, verifier } = await loadFixture(deployFixture);
+      await registerParties(contract, shipper, carrier, verifier);
       const deadline = await futureDeadline();
 
       await expect(
         contract.connect(shipper).createAgreement(
           carrier.address,
+          verifier.address,
           "Medical supplies",
           "Kuala Lumpur",
           "Penang",
@@ -128,6 +138,7 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
 
       expect(agreement.shipper).to.equal(shipper.address);
       expect(agreement.carrier).to.equal(carrier.address);
+      expect(agreement.verifier).to.equal(verifier.address);
       expect(agreement.status).to.equal(Status.Created);
       expect(agreement.requiredEscrow).to.equal(ESCROW);
       expect(pickup.proofHash).to.equal(PICKUP_HASH);
@@ -136,49 +147,57 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       expect(delivery.payoutBps).to.equal(7_000n);
       expect(await contract.getAgreementIds(shipper.address)).to.deep.equal([1n]);
       expect(await contract.getAgreementIds(carrier.address)).to.deep.equal([1n]);
+      expect(await contract.getAgreementIds(verifier.address)).to.deep.equal([1n]);
     });
 
-    it("requires a registered shipper and a registered carrier", async function () {
-      const { contract, shipper, carrier, stranger } = await loadFixture(deployFixture);
+    it("requires registered and distinct agreement participants", async function () {
+      const { contract, shipper, carrier, verifier, stranger } = await loadFixture(deployFixture);
       await contract.connect(carrier).registerUser("Chris Carrier", Role.Carrier);
+      await contract.connect(verifier).registerUser("Vera Verifier", Role.Verifier);
 
-      await expect(createAgreement(contract, stranger, carrier))
+      await expect(createAgreement(contract, stranger, carrier, verifier))
         .to.be.revertedWithCustomError(contract, "NotRegistered")
         .withArgs(stranger.address);
 
       await contract.connect(shipper).registerUser("Alice Shipper", Role.Shipper);
-      await expect(createAgreement(contract, shipper, stranger))
+      await expect(createAgreement(contract, shipper, stranger, verifier))
         .to.be.revertedWithCustomError(contract, "InvalidCarrier")
         .withArgs(stranger.address);
+      await expect(createAgreement(contract, shipper, carrier, verifier, { verifier: stranger.address }))
+        .to.be.revertedWithCustomError(contract, "InvalidVerifier")
+        .withArgs(stranger.address);
+      await expect(createAgreement(contract, shipper, carrier, verifier, { verifier: carrier.address }))
+        .to.be.revertedWithCustomError(contract, "InvalidVerifier")
+        .withArgs(carrier.address);
     });
 
     it("rejects self-assignment and invalid financial or deadline values", async function () {
-      const { contract, shipper, carrier } = await loadFixture(deployFixture);
-      await registerParties(contract, shipper, carrier);
+      const { contract, shipper, carrier, verifier } = await loadFixture(deployFixture);
+      await registerParties(contract, shipper, carrier, verifier);
 
-      await expect(createAgreement(contract, shipper, carrier, { carrier: shipper.address }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { carrier: shipper.address }))
         .to.be.revertedWithCustomError(contract, "SelfAssignment");
-      await expect(createAgreement(contract, shipper, carrier, { escrow: 0n }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { escrow: 0n }))
         .to.be.revertedWithCustomError(contract, "InvalidEscrowAmount");
-      await expect(createAgreement(contract, shipper, carrier, { deadline: await time.latest() }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { deadline: await time.latest() }))
         .to.be.revertedWithCustomError(contract, "InvalidDeadline");
-      await expect(createAgreement(contract, shipper, carrier, { pickupBps: 0 }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { pickupBps: 0 }))
         .to.be.revertedWithCustomError(contract, "InvalidPickupBps");
-      await expect(createAgreement(contract, shipper, carrier, { pickupBps: 10_000 }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { pickupBps: 10_000 }))
         .to.be.revertedWithCustomError(contract, "InvalidPickupBps");
     });
 
     it("rejects missing, duplicate, and invalid text data", async function () {
-      const { contract, shipper, carrier } = await loadFixture(deployFixture);
-      await registerParties(contract, shipper, carrier);
+      const { contract, shipper, carrier, verifier } = await loadFixture(deployFixture);
+      await registerParties(contract, shipper, carrier, verifier);
 
-      await expect(createAgreement(contract, shipper, carrier, { pickupHash: ethers.ZeroHash }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { pickupHash: ethers.ZeroHash }))
         .to.be.revertedWithCustomError(contract, "InvalidProofHash");
-      await expect(createAgreement(contract, shipper, carrier, { deliveryHash: PICKUP_HASH }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { deliveryHash: PICKUP_HASH }))
         .to.be.revertedWithCustomError(contract, "DuplicateProofHash");
-      await expect(createAgreement(contract, shipper, carrier, { cargo: "" }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { cargo: "" }))
         .to.be.revertedWithCustomError(contract, "InvalidTextLength");
-      await expect(createAgreement(contract, shipper, carrier, { origin: "x".repeat(81) }))
+      await expect(createAgreement(contract, shipper, carrier, verifier, { origin: "x".repeat(81) }))
         .to.be.revertedWithCustomError(contract, "InvalidTextLength");
     });
 
@@ -192,9 +211,9 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
 
   describe("acceptance and funding", function () {
     it("allows only the designated carrier to accept", async function () {
-      const { contract, shipper, carrier, stranger } = await loadFixture(deployFixture);
-      await registerParties(contract, shipper, carrier);
-      await createAgreement(contract, shipper, carrier);
+      const { contract, shipper, carrier, verifier, stranger } = await loadFixture(deployFixture);
+      await registerParties(contract, shipper, carrier, verifier);
+      await createAgreement(contract, shipper, carrier, verifier);
 
       await expect(contract.connect(stranger).acceptAgreement(1))
         .to.be.revertedWithCustomError(contract, "Unauthorized")
@@ -216,7 +235,7 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
     });
 
     it("rejects unauthorized, incorrect, early-state, repeated, and late funding", async function () {
-      const { contract, shipper, carrier, stranger, deadline } = await loadFixture(acceptedAgreementFixture);
+      const { contract, shipper, carrier, verifier, stranger, deadline } = await loadFixture(acceptedAgreementFixture);
 
       await expect(contract.connect(stranger).fundAgreement(1, { value: ESCROW }))
         .to.be.revertedWithCustomError(contract, "Unauthorized");
@@ -229,7 +248,7 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
         .to.be.revertedWithCustomError(contract, "InvalidAgreementStatus");
 
       const secondDeadline = await futureDeadline();
-      await createAgreement(contract, shipper, carrier, { deadline: secondDeadline });
+      await createAgreement(contract, shipper, carrier, verifier, { deadline: secondDeadline });
       await contract.connect(carrier).acceptAgreement(2);
       await time.increaseTo(secondDeadline + 1n);
       await expect(contract.connect(shipper).fundAgreement(2, { value: ESCROW }))
@@ -248,9 +267,9 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
 
   describe("cancellation and expiry refunds", function () {
     it("lets the shipper cancel only before funding", async function () {
-      const { contract, shipper, carrier, stranger } = await loadFixture(deployFixture);
-      await registerParties(contract, shipper, carrier);
-      await createAgreement(contract, shipper, carrier);
+      const { contract, shipper, carrier, verifier, stranger } = await loadFixture(deployFixture);
+      await registerParties(contract, shipper, carrier, verifier);
+      await createAgreement(contract, shipper, carrier, verifier);
 
       await expect(contract.connect(stranger).cancelAgreement(1))
         .to.be.revertedWithCustomError(contract, "Unauthorized");
@@ -302,14 +321,15 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
     });
 
     it("rolls state back atomically when a shipper rejects the refund", async function () {
-      const { contract, carrier, stranger } = await loadFixture(deployFixture);
+      const { contract, carrier, verifier, stranger } = await loadFixture(deployFixture);
       await contract.connect(carrier).registerUser("Chris Carrier", Role.Carrier);
+      await contract.connect(verifier).registerUser("Vera Verifier", Role.Verifier);
 
       const harness = await ethers.deployContract("RefundReceiverHarness", [await contract.getAddress()]);
       await harness.waitForDeployment();
       await harness.registerAsShipper();
       const deadline = await futureDeadline();
-      await harness.create(carrier.address, ESCROW, deadline, PICKUP_HASH, DELIVERY_HASH);
+      await harness.create(carrier.address, verifier.address, ESCROW, deadline, PICKUP_HASH, DELIVERY_HASH);
       await contract.connect(carrier).acceptAgreement(1);
       await harness.fund({ value: ESCROW });
       await harness.configureReceiver(true, false);
@@ -322,14 +342,15 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
     });
 
     it("blocks a receiver's reentrant refund attempt while completing the original refund", async function () {
-      const { contract, carrier, stranger } = await loadFixture(deployFixture);
+      const { contract, carrier, verifier, stranger } = await loadFixture(deployFixture);
       await contract.connect(carrier).registerUser("Chris Carrier", Role.Carrier);
+      await contract.connect(verifier).registerUser("Vera Verifier", Role.Verifier);
 
       const harness = await ethers.deployContract("RefundReceiverHarness", [await contract.getAddress()]);
       await harness.waitForDeployment();
       await harness.registerAsShipper();
       const deadline = await futureDeadline();
-      await harness.create(carrier.address, ESCROW, deadline, PICKUP_HASH, DELIVERY_HASH);
+      await harness.create(carrier.address, verifier.address, ESCROW, deadline, PICKUP_HASH, DELIVERY_HASH);
       await contract.connect(carrier).acceptAgreement(1);
       await harness.fund({ value: ESCROW });
       await harness.configureReceiver(false, true);

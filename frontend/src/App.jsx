@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, getAddress, id, isAddress, parseEther } from "ethers";
 import CarrierDashboard from "./components/CarrierDashboard.jsx";
 import EventHistory from "./components/EventHistory.jsx";
+import VerifierDashboard from "./components/VerifierDashboard.jsx";
 import { loadAgreementHistory } from "./lib/history.js";
 import {
   LOCAL_CHAIN_ID,
@@ -13,7 +14,7 @@ import {
   switchToLocalNetwork,
 } from "./lib/web3.js";
 
-const ROLES = Object.freeze({ NONE: 0, SHIPPER: 1, CARRIER: 2 });
+const ROLES = Object.freeze({ NONE: 0, SHIPPER: 1, CARRIER: 2, VERIFIER: 3 });
 const STATUS_LABELS = [
   "Created",
   "Accepted",
@@ -26,6 +27,7 @@ const STATUS_LABELS = [
 
 const emptyAgreementForm = () => ({
   carrier: "",
+  verifier: "",
   cargo: "",
   origin: "",
   destination: "",
@@ -54,6 +56,11 @@ function App() {
   const [user, setUser] = useState(null);
   const [agreements, setAgreements] = useState([]);
   const [history, setHistory] = useState([]);
+  const [carrierStats, setCarrierStats] = useState({
+    verifiedMilestones: 0n,
+    completedAgreements: 0n,
+    expiredFundedAgreements: 0n,
+  });
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
   const [registration, setRegistration] = useState({ displayName: "", role: ROLES.SHIPPER });
@@ -71,6 +78,7 @@ function App() {
     if (Number(nextUser.role) === ROLES.NONE) {
       setAgreements([]);
       setHistory([]);
+      setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
       return;
     }
 
@@ -87,6 +95,11 @@ function App() {
     );
     setAgreements(records);
     setHistory(await loadAgreementHistory(activeContract, agreementIds));
+    if (Number(nextUser.role) === ROLES.CARRIER) {
+      setCarrierStats(await activeContract.getCarrierStats(activeAccount));
+    } else {
+      setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
+    }
   }, []);
 
   const syncWallet = useCallback(
@@ -101,6 +114,7 @@ function App() {
           setUser(null);
           setAgreements([]);
           setHistory([]);
+          setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
           return;
         }
 
@@ -163,8 +177,15 @@ function App() {
 
   const validateAgreementForm = () => {
     if (!isAddress(agreementForm.carrier)) return "Enter a valid Ethereum carrier address.";
+    if (!isAddress(agreementForm.verifier)) return "Enter a valid Ethereum verifier address.";
     if (getAddress(agreementForm.carrier) === getAddress(account)) {
       return "The shipper and carrier must use different wallets.";
+    }
+    if (getAddress(agreementForm.verifier) === getAddress(account)) {
+      return "The shipper and Verifier must use different wallets.";
+    }
+    if (getAddress(agreementForm.verifier) === getAddress(agreementForm.carrier)) {
+      return "The Carrier and Verifier must use different wallets.";
     }
     if (!agreementForm.cargo.trim() || !agreementForm.origin.trim() || !agreementForm.destination.trim()) {
       return "Cargo, origin, and destination are required.";
@@ -205,6 +226,7 @@ function App() {
       () =>
         contract.createAgreement(
           getAddress(agreementForm.carrier),
+          getAddress(agreementForm.verifier),
           agreementForm.cargo.trim(),
           agreementForm.origin.trim(),
           agreementForm.destination.trim(),
@@ -214,7 +236,7 @@ function App() {
           id(agreementForm.pickupCode),
           id(agreementForm.deliveryCode),
         ),
-      "Agreement created. Give each one-time code only to the trusted person who verifies that checkpoint.",
+      "Agreement created. Give both one-time codes only to the nominated Verifier.",
     );
 
     if (succeeded) setAgreementForm(emptyAgreementForm());
@@ -234,11 +256,18 @@ function App() {
       `Agreement #${agreement.id} accepted. The Shipper can now fund the escrow.`,
     );
 
-  const submitMilestoneProof = (agreement, milestone, proofCode) =>
+  const submitMilestoneEvidence = (agreement, milestone, evidenceCid) =>
     runTransaction(
-      `proof-${agreement.id}-${milestone}`,
-      () => contract.submitMilestoneProof(agreement.id, milestone, proofCode),
-      `${milestone === 0 ? "Pickup" : "Delivery"} proof verified and payout released for agreement #${agreement.id}.`,
+      `evidence-${agreement.id}-${milestone}`,
+      () => contract.submitMilestoneEvidence(agreement.id, milestone, evidenceCid),
+      `${milestone === 0 ? "Pickup" : "Delivery"} evidence saved for agreement #${agreement.id}.`,
+    );
+
+  const approveMilestone = (agreement, milestone, proofCode) =>
+    runTransaction(
+      `approve-${agreement.id}-${milestone}`,
+      () => contract.approveMilestone(agreement.id, milestone, proofCode),
+      `${milestone === 0 ? "Pickup" : "Delivery"} approved and payout released for agreement #${agreement.id}.`,
     );
 
   const cancelAgreement = (agreement) =>
@@ -346,6 +375,7 @@ function App() {
                 >
                   <option value={ROLES.SHIPPER}>Shipper — creates and funds jobs</option>
                   <option value={ROLES.CARRIER}>Carrier — transports cargo</option>
+                  <option value={ROLES.VERIFIER}>Verifier — reviews evidence and approves milestones</option>
                 </select>
               </label>
               <button className="button button-primary" disabled={busy === "register"}>
@@ -359,10 +389,22 @@ function App() {
           <CarrierDashboard
             user={user}
             agreements={agreements}
+            stats={carrierStats}
             busy={busy}
             onRefresh={() => loadContractData(contract, account)}
             onAccept={acceptAgreement}
-            onSubmitProof={submitMilestoneProof}
+            onSubmitEvidence={submitMilestoneEvidence}
+            onRefund={refundAgreement}
+          />
+        )}
+
+        {contract && role === ROLES.VERIFIER && (
+          <VerifierDashboard
+            user={user}
+            agreements={agreements}
+            busy={busy}
+            onRefresh={() => loadContractData(contract, account)}
+            onApprove={approveMilestone}
             onRefund={refundAgreement}
           />
         )}
@@ -395,6 +437,10 @@ function App() {
                   <label className="field-full">
                     Carrier wallet address
                     <input value={agreementForm.carrier} onChange={(event) => setAgreementForm({ ...agreementForm, carrier: event.target.value })} placeholder="0x…" />
+                  </label>
+                  <label className="field-full">
+                    Verifier wallet address
+                    <input value={agreementForm.verifier} onChange={(event) => setAgreementForm({ ...agreementForm, verifier: event.target.value })} placeholder="0x…" />
                   </label>
                   <label className="field-full">
                     Cargo description
@@ -432,7 +478,7 @@ function App() {
                     Delivery proof code
                     <input type="password" autoComplete="off" value={agreementForm.deliveryCode} onChange={(event) => setAgreementForm({ ...agreementForm, deliveryCode: event.target.value })} placeholder="Different one-time secret" />
                   </label>
-                  <p className="security-note field-full">Only each code's hash is saved during creation. Proof codes are cleared from this page after confirmation and cannot be recovered.</p>
+                  <p className="security-note field-full">Only each code's hash is saved during creation. Give the plaintext codes only to the nominated Verifier; they are cleared after confirmation and cannot be recovered.</p>
                   <button className="button button-primary field-full" disabled={busy === "create"}>
                     {busy === "create" ? "Creating agreement…" : "Create agreement"}
                   </button>
@@ -460,6 +506,7 @@ function App() {
                           <div className="route"><span>{agreement.origin}</span><i>→</i><span>{agreement.destination}</span></div>
                           <dl className="agreement-details">
                             <div><dt>Carrier</dt><dd title={agreement.carrier}>{shortAddress(agreement.carrier)}</dd></div>
+                            <div><dt>Verifier</dt><dd title={agreement.verifier}>{shortAddress(agreement.verifier)}</dd></div>
                             <div><dt>Escrow</dt><dd>{formatEther(agreement.requiredEscrow)} ETH</dd></div>
                             <div><dt>Released</dt><dd>{formatEther(agreement.releasedAmount)} ETH</dd></div>
                             <div><dt>Deadline</dt><dd>{formatDate(agreement.deadline)}</dd></div>
@@ -486,7 +533,7 @@ function App() {
                                 Cancel
                               </button>
                             )}
-                            {[2, 3].includes(status) && !expired && <span className="action-hint">Escrow locked until proof or expiry</span>}
+                            {[2, 3].includes(status) && !expired && <span className="action-hint">Escrow locked until Verifier approval or expiry</span>}
                             {[2, 3].includes(status) && expired && (
                               <button className="button button-primary button-small" disabled={busy === `refund-${agreement.id}`} onClick={() => refundAgreement(agreement)}>
                                 {busy === `refund-${agreement.id}` ? "Refunding…" : "Process expired refund"}

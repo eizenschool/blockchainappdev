@@ -148,6 +148,9 @@ h1 span { color: var(--forest); }
 .proof-form input:focus { border-color: #4b8c74; box-shadow: 0 0 0 3px rgba(75,140,116,.12); }
 .proof-disclosure { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .proof-error { margin: 0; color: var(--danger); font-size: 12px; font-weight: 700; }
+.ipfs-link { width: fit-content; color: var(--forest); font-size: 12px; font-weight: 800; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.cid-value { margin: 0; padding: 9px 11px; overflow-wrap: anywhere; color: #4f5b53; background: #f2f5f1; border-radius: 9px; font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.verifier-dashboard { margin-bottom: 22px; }
 
 .history-panel { margin-top: 22px; padding: 28px; }
 .history-panel .section-title { margin-bottom: 8px; }

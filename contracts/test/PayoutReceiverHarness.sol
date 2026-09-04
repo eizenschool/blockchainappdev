@@ -6,7 +6,7 @@ interface IProofRoutePayoutHarness {
 
     function acceptAgreement(uint256 agreementId) external;
 
-    function submitMilestoneProof(uint256 agreementId, uint8 milestoneType, string calldata proofCode) external;
+    function submitMilestoneEvidence(uint256 agreementId, uint8 milestoneType, string calldata evidenceCid) external;
 }
 
 /// @dev Test-only carrier used to verify failed payout and reentrancy behavior.
@@ -30,8 +30,8 @@ contract PayoutReceiverHarness {
         escrow.acceptAgreement(nextAgreementId);
     }
 
-    function submit(uint8 milestoneType, string calldata proofCode) external {
-        escrow.submitMilestoneProof(agreementId, milestoneType, proofCode);
+    function submitEvidence(uint8 milestoneType, string calldata evidenceCid) external {
+        escrow.submitMilestoneEvidence(agreementId, milestoneType, evidenceCid);
     }
 
     function configureReceiver(bool shouldReject, bool shouldReenter) external {
@@ -44,7 +44,7 @@ contract PayoutReceiverHarness {
         if (rejectPayout) revert("payout rejected");
 
         if (attemptReentry) {
-            try escrow.submitMilestoneProof(agreementId, 0, "pickup-secret") {
+            try escrow.submitMilestoneEvidence(agreementId, 0, "bafy-reentrant-attempt") {
                 reentryBlocked = false;
             } catch {
                 reentryBlocked = true;

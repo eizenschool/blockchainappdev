@@ -33,6 +33,11 @@ export default function EventHistory({ entries }) {
                   <span>Agreement #{entry.agreementId}</span>
                 </div>
                 <p>{entry.detail}</p>
+                {entry.evidenceCid && (
+                  <a className="ipfs-link" href={`https://ipfs.io/ipfs/${encodeURIComponent(entry.evidenceCid)}`} target="_blank" rel="noreferrer">
+                    Open recorded IPFS evidence ↗
+                  </a>
+                )}
                 <small>
                   {formatDate(entry.timestamp)} · Transaction <code title={entry.transactionHash}>{shortHash(entry.transactionHash)}</code>
                 </small>

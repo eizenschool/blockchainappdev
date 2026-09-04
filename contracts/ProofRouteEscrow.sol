@@ -4,18 +4,20 @@ pragma solidity ^0.8.28;
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title ProofRouteEscrow
-/// @notice Logistics agreements with test-Ether escrow and hash-verified milestones.
-/// @dev Complete two-party flow: shipper escrow, carrier milestones, progressive payouts and expiry refunds.
+/// @notice Medical-supply logistics agreements with test-Ether escrow, IPFS evidence and independent verification.
+/// @dev Shippers nominate a third-party Verifier. Carriers submit evidence CIDs; Verifiers approve payouts.
 contract ProofRouteEscrow is ReentrancyGuard {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant MAX_NAME_LENGTH = 32;
     uint256 public constant MAX_CARGO_LENGTH = 120;
     uint256 public constant MAX_LOCATION_LENGTH = 80;
+    uint256 public constant MAX_EVIDENCE_CID_LENGTH = 128;
 
     enum Role {
         None,
         Shipper,
-        Carrier
+        Carrier,
+        Verifier
     }
 
     enum AgreementStatus {
@@ -43,6 +45,7 @@ contract ProofRouteEscrow is ReentrancyGuard {
         uint256 id;
         address shipper;
         address carrier;
+        address verifier;
         string cargo;
         string origin;
         string destination;
@@ -61,6 +64,14 @@ contract ProofRouteEscrow is ReentrancyGuard {
         uint16 payoutBps;
         bool completed;
         uint64 completedAt;
+        string evidenceCid;
+        uint64 submittedAt;
+    }
+
+    struct CarrierStats {
+        uint256 verifiedMilestones;
+        uint256 completedAgreements;
+        uint256 expiredFundedAgreements;
     }
 
     error AlreadyRegistered(address account);
@@ -69,6 +80,7 @@ contract ProofRouteEscrow is ReentrancyGuard {
     error InvalidDisplayName();
     error InvalidTextLength(bytes32 field, uint256 suppliedLength, uint256 maximumLength);
     error InvalidCarrier(address carrier);
+    error InvalidVerifier(address verifier);
     error SelfAssignment();
     error InvalidEscrowAmount();
     error InvalidDeadline(uint256 suppliedDeadline, uint256 currentTimestamp);
@@ -84,6 +96,8 @@ contract ProofRouteEscrow is ReentrancyGuard {
     error InvalidMilestoneOrder(MilestoneType milestone, AgreementStatus currentStatus);
     error InvalidMilestoneProof(uint256 agreementId, MilestoneType milestone);
     error MilestoneAlreadyCompleted(uint256 agreementId, MilestoneType milestone);
+    error InvalidEvidenceCid(uint256 suppliedLength, uint256 maximumLength);
+    error EvidenceNotSubmitted(uint256 agreementId, MilestoneType milestone);
     error EtherTransferFailed();
     error DirectPaymentNotAllowed();
 
@@ -96,16 +110,23 @@ contract ProofRouteEscrow is ReentrancyGuard {
         uint64 deadline,
         uint16 pickupBps
     );
+    event AgreementVerifierAssigned(uint256 indexed agreementId, address indexed verifier);
     event AgreementAccepted(uint256 indexed agreementId, address indexed carrier, uint64 acceptedAt);
     event AgreementFunded(uint256 indexed agreementId, address indexed shipper, uint256 amount, uint64 fundedAt);
     event AgreementCancelled(uint256 indexed agreementId, address indexed shipper);
     event AgreementRefunded(uint256 indexed agreementId, address indexed shipper, uint256 amount);
-
-    // Reserved shared events for Member B's milestone implementation.
-    event MilestoneVerified(
+    event MilestoneEvidenceSubmitted(
         uint256 indexed agreementId,
         MilestoneType indexed milestone,
         address indexed carrier,
+        string evidenceCid,
+        uint64 submittedAt
+    );
+    event MilestoneVerified(
+        uint256 indexed agreementId,
+        MilestoneType indexed milestone,
+        address indexed verifier,
+        address carrier,
         uint64 verifiedAt
     );
     event EscrowReleased(
@@ -122,35 +143,28 @@ contract ProofRouteEscrow is ReentrancyGuard {
     mapping(uint256 agreementId => Agreement agreement) private _agreements;
     mapping(uint256 agreementId => mapping(MilestoneType milestoneType => Milestone milestone)) private _milestones;
     mapping(address account => uint256[] agreementIds) private _userAgreementIds;
+    mapping(address carrier => CarrierStats stats) private _carrierStats;
 
     modifier agreementExists(uint256 agreementId) {
-        if (agreementId == 0 || agreementId > agreementCount) {
-            revert AgreementNotFound(agreementId);
-        }
+        if (agreementId == 0 || agreementId > agreementCount) revert AgreementNotFound(agreementId);
         _;
     }
 
     function registerUser(string calldata displayName, Role role) external {
-        if (_users[msg.sender].role != Role.None) {
-            revert AlreadyRegistered(msg.sender);
-        }
-        if (role != Role.Shipper && role != Role.Carrier) {
-            revert InvalidRole();
-        }
+        if (_users[msg.sender].role != Role.None) revert AlreadyRegistered(msg.sender);
+        if (role != Role.Shipper && role != Role.Carrier && role != Role.Verifier) revert InvalidRole();
 
         uint256 nameLength = bytes(displayName).length;
-        if (nameLength < 3 || nameLength > MAX_NAME_LENGTH) {
-            revert InvalidDisplayName();
-        }
+        if (nameLength < 3 || nameLength > MAX_NAME_LENGTH) revert InvalidDisplayName();
 
         uint64 registeredAt = uint64(block.timestamp);
         _users[msg.sender] = User({displayName: displayName, role: role, registeredAt: registeredAt});
-
         emit UserRegistered(msg.sender, displayName, role, registeredAt);
     }
 
     function createAgreement(
         address carrier,
+        address verifier,
         string calldata cargo,
         string calldata origin,
         string calldata destination,
@@ -164,6 +178,9 @@ contract ProofRouteEscrow is ReentrancyGuard {
 
         if (carrier == msg.sender) revert SelfAssignment();
         if (_users[carrier].role != Role.Carrier) revert InvalidCarrier(carrier);
+        if (verifier == msg.sender || verifier == carrier || _users[verifier].role != Role.Verifier) {
+            revert InvalidVerifier(verifier);
+        }
         if (requiredEscrow == 0) revert InvalidEscrowAmount();
         if (deadline <= block.timestamp) revert InvalidDeadline(deadline, block.timestamp);
         if (pickupBps == 0 || pickupBps >= BPS_DENOMINATOR) revert InvalidPickupBps(pickupBps);
@@ -181,6 +198,7 @@ contract ProofRouteEscrow is ReentrancyGuard {
             id: agreementId,
             shipper: msg.sender,
             carrier: carrier,
+            verifier: verifier,
             cargo: cargo,
             origin: origin,
             destination: destination,
@@ -198,22 +216,27 @@ contract ProofRouteEscrow is ReentrancyGuard {
             proofHash: pickupProofHash,
             payoutBps: pickupBps,
             completed: false,
-            completedAt: 0
+            completedAt: 0,
+            evidenceCid: "",
+            submittedAt: 0
         });
         _milestones[agreementId][MilestoneType.Delivery] = Milestone({
             proofHash: deliveryProofHash,
             payoutBps: BPS_DENOMINATOR - pickupBps,
             completed: false,
-            completedAt: 0
+            completedAt: 0,
+            evidenceCid: "",
+            submittedAt: 0
         });
 
         _userAgreementIds[msg.sender].push(agreementId);
         _userAgreementIds[carrier].push(agreementId);
+        _userAgreementIds[verifier].push(agreementId);
 
         emit AgreementCreated(agreementId, msg.sender, carrier, requiredEscrow, deadline, pickupBps);
+        emit AgreementVerifierAssigned(agreementId, verifier);
     }
 
-    /// @notice Shared lifecycle dependency; Member B owns the final carrier-facing UI for this action.
     function acceptAgreement(uint256 agreementId) external agreementExists(agreementId) {
         Agreement storage agreement = _agreements[agreementId];
         if (msg.sender != agreement.carrier) revert Unauthorized(msg.sender);
@@ -224,7 +247,6 @@ contract ProofRouteEscrow is ReentrancyGuard {
         uint64 acceptedAt = uint64(block.timestamp);
         agreement.acceptedAt = acceptedAt;
         agreement.status = AgreementStatus.Accepted;
-
         emit AgreementAccepted(agreementId, msg.sender, acceptedAt);
     }
 
@@ -240,67 +262,74 @@ contract ProofRouteEscrow is ReentrancyGuard {
         uint64 fundedAt = uint64(block.timestamp);
         agreement.fundedAt = fundedAt;
         agreement.status = AgreementStatus.Funded;
-
         emit AgreementFunded(agreementId, msg.sender, msg.value, fundedAt);
     }
 
-    /// @notice Verifies a carrier checkpoint and releases that milestone's escrow payout.
-    /// @dev The plaintext proof becomes public transaction calldata after submission.
-    function submitMilestoneProof(
+    function submitMilestoneEvidence(
         uint256 agreementId,
         MilestoneType milestoneType,
-        string calldata proofCode
+        string calldata evidenceCid
     ) external nonReentrant agreementExists(agreementId) {
         Agreement storage agreement = _agreements[agreementId];
         if (msg.sender != agreement.carrier) revert Unauthorized(msg.sender);
         _requireRole(msg.sender, Role.Carrier);
 
         Milestone storage milestone = _milestones[agreementId][milestoneType];
-        if (milestone.completed) revert MilestoneAlreadyCompleted(agreementId, milestoneType);
-        if (block.timestamp > agreement.deadline) {
-            revert DeadlinePassed(agreement.deadline, block.timestamp);
+        _requireActionableMilestone(agreement, milestone, agreementId, milestoneType);
+
+        uint256 cidLength = bytes(evidenceCid).length;
+        if (cidLength == 0 || cidLength > MAX_EVIDENCE_CID_LENGTH) {
+            revert InvalidEvidenceCid(cidLength, MAX_EVIDENCE_CID_LENGTH);
         }
 
-        if (milestoneType == MilestoneType.Pickup) {
-            if (agreement.status != AgreementStatus.Funded) {
-                revert InvalidMilestoneOrder(milestoneType, agreement.status);
-            }
-        } else if (
-            agreement.status != AgreementStatus.PartiallyCompleted ||
-            !_milestones[agreementId][MilestoneType.Pickup].completed
-        ) {
-            revert InvalidMilestoneOrder(milestoneType, agreement.status);
-        }
+        uint64 submittedAt = uint64(block.timestamp);
+        milestone.evidenceCid = evidenceCid;
+        milestone.submittedAt = submittedAt;
+        emit MilestoneEvidenceSubmitted(agreementId, milestoneType, msg.sender, evidenceCid, submittedAt);
+    }
 
+    function approveMilestone(
+        uint256 agreementId,
+        MilestoneType milestoneType,
+        string calldata proofCode
+    ) external nonReentrant agreementExists(agreementId) {
+        Agreement storage agreement = _agreements[agreementId];
+        if (msg.sender != agreement.verifier) revert Unauthorized(msg.sender);
+        _requireRole(msg.sender, Role.Verifier);
+
+        Milestone storage milestone = _milestones[agreementId][milestoneType];
+        _requireActionableMilestone(agreement, milestone, agreementId, milestoneType);
+        if (milestone.submittedAt == 0 || bytes(milestone.evidenceCid).length == 0) {
+            revert EvidenceNotSubmitted(agreementId, milestoneType);
+        }
         if (keccak256(bytes(proofCode)) != milestone.proofHash) {
             revert InvalidMilestoneProof(agreementId, milestoneType);
         }
 
         uint64 verifiedAt = uint64(block.timestamp);
         uint256 payoutAmount;
+        CarrierStats storage stats = _carrierStats[agreement.carrier];
 
         if (milestoneType == MilestoneType.Pickup) {
             payoutAmount = (agreement.requiredEscrow * milestone.payoutBps) / BPS_DENOMINATOR;
             agreement.status = AgreementStatus.PartiallyCompleted;
         } else {
-            // Delivery receives every remaining wei so integer division cannot strand dust.
             payoutAmount = agreement.requiredEscrow - agreement.releasedAmount;
             agreement.status = AgreementStatus.Completed;
+            stats.completedAgreements += 1;
         }
 
-        // Checks-effects-interactions: all effects revert if the carrier cannot receive Ether.
         milestone.completed = true;
         milestone.completedAt = verifiedAt;
         agreement.releasedAmount += payoutAmount;
+        stats.verifiedMilestones += 1;
 
         (bool success, ) = payable(agreement.carrier).call{value: payoutAmount}("");
         if (!success) revert EtherTransferFailed();
 
-        emit MilestoneVerified(agreementId, milestoneType, agreement.carrier, verifiedAt);
+        emit MilestoneVerified(agreementId, milestoneType, msg.sender, agreement.carrier, verifiedAt);
         emit EscrowReleased(agreementId, milestoneType, agreement.carrier, payoutAmount);
-        if (milestoneType == MilestoneType.Delivery) {
-            emit AgreementCompleted(agreementId, verifiedAt);
-        }
+        if (milestoneType == MilestoneType.Delivery) emit AgreementCompleted(agreementId, verifiedAt);
     }
 
     function cancelAgreement(uint256 agreementId) external agreementExists(agreementId) {
@@ -317,10 +346,7 @@ contract ProofRouteEscrow is ReentrancyGuard {
     /// @notice Refunds all unreleased escrow after expiry. Any wallet may trigger this upkeep action.
     function processExpiredAgreement(uint256 agreementId) external nonReentrant agreementExists(agreementId) {
         Agreement storage agreement = _agreements[agreementId];
-        if (
-            agreement.status != AgreementStatus.Funded &&
-            agreement.status != AgreementStatus.PartiallyCompleted
-        ) {
+        if (agreement.status != AgreementStatus.Funded && agreement.status != AgreementStatus.PartiallyCompleted) {
             revert InvalidAgreementStatus(agreement.status);
         }
         if (block.timestamp <= agreement.deadline) {
@@ -328,9 +354,8 @@ contract ProofRouteEscrow is ReentrancyGuard {
         }
 
         uint256 refundAmount = agreement.requiredEscrow - agreement.releasedAmount;
-
-        // Checks-effects-interactions: lock the terminal state before transferring Ether.
         agreement.status = AgreementStatus.Refunded;
+        _carrierStats[agreement.carrier].expiredFundedAgreements += 1;
 
         (bool success, ) = payable(agreement.shipper).call{value: refundAmount}("");
         if (!success) revert EtherTransferFailed();
@@ -364,12 +389,39 @@ contract ProofRouteEscrow is ReentrancyGuard {
         return _userAgreementIds[account];
     }
 
+    function getCarrierStats(address carrier) external view returns (CarrierStats memory) {
+        return _carrierStats[carrier];
+    }
+
     receive() external payable {
         revert DirectPaymentNotAllowed();
     }
 
     fallback() external payable {
         revert DirectPaymentNotAllowed();
+    }
+
+    function _requireActionableMilestone(
+        Agreement storage agreement,
+        Milestone storage milestone,
+        uint256 agreementId,
+        MilestoneType milestoneType
+    ) private view {
+        if (milestone.completed) revert MilestoneAlreadyCompleted(agreementId, milestoneType);
+        if (block.timestamp > agreement.deadline) {
+            revert DeadlinePassed(agreement.deadline, block.timestamp);
+        }
+
+        if (milestoneType == MilestoneType.Pickup) {
+            if (agreement.status != AgreementStatus.Funded) {
+                revert InvalidMilestoneOrder(milestoneType, agreement.status);
+            }
+        } else if (
+            agreement.status != AgreementStatus.PartiallyCompleted ||
+            !_milestones[agreementId][MilestoneType.Pickup].completed
+        ) {
+            revert InvalidMilestoneOrder(milestoneType, agreement.status);
+        }
     }
 
     function _requireRole(address account, Role requiredRole) private view {
