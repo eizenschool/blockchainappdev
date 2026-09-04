@@ -1,7 +1,7 @@
 {
   "contractName": "ProofRouteEscrow",
   "chainId": 31337,
-  "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+  "address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   "abi": [
     {
       "inputs": [
@@ -76,6 +76,22 @@
       "inputs": [
         {
           "internalType": "uint256",
+          "name": "agreementId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
+          "name": "milestone",
+          "type": "uint8"
+        }
+      ],
+      "name": "EvidenceNotSubmitted",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
           "name": "expected",
           "type": "uint256"
         },
@@ -91,7 +107,7 @@
     {
       "inputs": [
         {
-          "internalType": "enum ProofRouteEscrow.AgreementStatus",
+          "internalType": "enum ProofRouteRegistry.AgreementStatus",
           "name": "currentStatus",
           "type": "uint8"
         }
@@ -139,12 +155,28 @@
     {
       "inputs": [
         {
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "uint256",
+          "name": "suppliedLength",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maximumLength",
+          "type": "uint256"
+        }
+      ],
+      "name": "InvalidEvidenceCid",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestone",
           "type": "uint8"
         },
         {
-          "internalType": "enum ProofRouteEscrow.AgreementStatus",
+          "internalType": "enum ProofRouteRegistry.AgreementStatus",
           "name": "currentStatus",
           "type": "uint8"
         }
@@ -160,7 +192,7 @@
           "type": "uint256"
         },
         {
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestone",
           "type": "uint8"
         }
@@ -213,12 +245,23 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "verifier",
+          "type": "address"
+        }
+      ],
+      "name": "InvalidVerifier",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "uint256",
           "name": "agreementId",
           "type": "uint256"
         },
         {
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestone",
           "type": "uint8"
         }
@@ -431,7 +474,26 @@
         },
         {
           "indexed": true,
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "address",
+          "name": "verifier",
+          "type": "address"
+        }
+      ],
+      "name": "AgreementVerifierAssigned",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "agreementId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestone",
           "type": "uint8"
         },
@@ -462,12 +524,55 @@
         },
         {
           "indexed": true,
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestone",
           "type": "uint8"
         },
         {
           "indexed": true,
+          "internalType": "address",
+          "name": "carrier",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "evidenceCid",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "submittedAt",
+          "type": "uint64"
+        }
+      ],
+      "name": "MilestoneEvidenceSubmitted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "agreementId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
+          "name": "milestone",
+          "type": "uint8"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "verifier",
+          "type": "address"
+        },
+        {
+          "indexed": false,
           "internalType": "address",
           "name": "carrier",
           "type": "address"
@@ -499,7 +604,7 @@
         },
         {
           "indexed": true,
-          "internalType": "enum ProofRouteEscrow.Role",
+          "internalType": "enum ProofRouteRegistry.Role",
           "name": "role",
           "type": "uint8"
         },
@@ -533,6 +638,19 @@
     {
       "inputs": [],
       "name": "MAX_CARGO_LENGTH",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_EVIDENCE_CID_LENGTH",
       "outputs": [
         {
           "internalType": "uint256",
@@ -601,6 +719,29 @@
           "internalType": "uint256",
           "name": "agreementId",
           "type": "uint256"
+        },
+        {
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
+          "name": "milestoneType",
+          "type": "uint8"
+        },
+        {
+          "internalType": "string",
+          "name": "proofCode",
+          "type": "string"
+        }
+      ],
+      "name": "approveMilestone",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "agreementId",
+          "type": "uint256"
         }
       ],
       "name": "cancelAgreement",
@@ -613,6 +754,11 @@
         {
           "internalType": "address",
           "name": "carrier",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "verifier",
           "type": "address"
         },
         {
@@ -708,6 +854,11 @@
               "type": "address"
             },
             {
+              "internalType": "address",
+              "name": "verifier",
+              "type": "address"
+            },
+            {
               "internalType": "string",
               "name": "cargo",
               "type": "string"
@@ -758,12 +909,12 @@
               "type": "uint16"
             },
             {
-              "internalType": "enum ProofRouteEscrow.AgreementStatus",
+              "internalType": "enum ProofRouteRegistry.AgreementStatus",
               "name": "status",
               "type": "uint8"
             }
           ],
-          "internalType": "struct ProofRouteEscrow.Agreement",
+          "internalType": "struct ProofRouteRegistry.Agreement",
           "name": "",
           "type": "tuple"
         }
@@ -793,12 +944,48 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "carrier",
+          "type": "address"
+        }
+      ],
+      "name": "getCarrierStats",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "verifiedMilestones",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "completedAgreements",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "expiredFundedAgreements",
+              "type": "uint256"
+            }
+          ],
+          "internalType": "struct ProofRouteRegistry.CarrierStats",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "uint256",
           "name": "agreementId",
           "type": "uint256"
         },
         {
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestoneType",
           "type": "uint8"
         }
@@ -826,9 +1013,19 @@
               "internalType": "uint64",
               "name": "completedAt",
               "type": "uint64"
+            },
+            {
+              "internalType": "string",
+              "name": "evidenceCid",
+              "type": "string"
+            },
+            {
+              "internalType": "uint64",
+              "name": "submittedAt",
+              "type": "uint64"
             }
           ],
-          "internalType": "struct ProofRouteEscrow.Milestone",
+          "internalType": "struct ProofRouteRegistry.Milestone",
           "name": "",
           "type": "tuple"
         }
@@ -854,7 +1051,7 @@
               "type": "string"
             },
             {
-              "internalType": "enum ProofRouteEscrow.Role",
+              "internalType": "enum ProofRouteRegistry.Role",
               "name": "role",
               "type": "uint8"
             },
@@ -864,7 +1061,7 @@
               "type": "uint64"
             }
           ],
-          "internalType": "struct ProofRouteEscrow.User",
+          "internalType": "struct ProofRouteRegistry.User",
           "name": "",
           "type": "tuple"
         }
@@ -893,7 +1090,7 @@
           "type": "string"
         },
         {
-          "internalType": "enum ProofRouteEscrow.Role",
+          "internalType": "enum ProofRouteRegistry.Role",
           "name": "role",
           "type": "uint8"
         }
@@ -911,17 +1108,17 @@
           "type": "uint256"
         },
         {
-          "internalType": "enum ProofRouteEscrow.MilestoneType",
+          "internalType": "enum ProofRouteRegistry.MilestoneType",
           "name": "milestoneType",
           "type": "uint8"
         },
         {
           "internalType": "string",
-          "name": "proofCode",
+          "name": "evidenceCid",
           "type": "string"
         }
       ],
-      "name": "submitMilestoneProof",
+      "name": "submitMilestoneEvidence",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

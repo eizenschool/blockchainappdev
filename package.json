@@ -12,6 +12,7 @@
     "test": "hardhat test mocha",
     "node": "hardhat node",
     "deploy:local": "hardhat run scripts/deploy-local.js --build-profile production --network localhost",
+    "demo:local": "hardhat run scripts/verify-local-flow.js --network localhost",
     "frontend:dev": "npm run dev --workspace frontend",
     "frontend:build": "npm run build --workspace frontend",
     "frontend:lint": "npm run lint --workspace frontend"

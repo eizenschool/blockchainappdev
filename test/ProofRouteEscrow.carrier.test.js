@@ -172,6 +172,7 @@ describe("ProofRouteEscrow: carrier evidence and verifier settlement", function 
         .to.be.revertedWithCustomError(contract, "Unauthorized").withArgs(unrelatedVerifier.address);
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Pickup, "wrong-code"))
         .to.be.revertedWithCustomError(contract, "InvalidMilestoneProof").withArgs(1, Milestone.Pickup);
+      expect((await contract.getCarrierStats(carrier.address)).verifiedMilestones).to.equal(0n);
     });
 
     it("rejects milestone actions before funding and delivery before pickup", async function () {
@@ -195,6 +196,7 @@ describe("ProofRouteEscrow: carrier evidence and verifier settlement", function 
         .to.be.revertedWithCustomError(contract, "MilestoneAlreadyCompleted").withArgs(1, Milestone.Pickup);
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, REPLACEMENT_CID))
         .to.be.revertedWithCustomError(contract, "MilestoneAlreadyCompleted").withArgs(1, Milestone.Pickup);
+      expect((await contract.getCarrierStats(carrier.address)).verifiedMilestones).to.equal(1n);
     });
 
     it("rejects evidence and approval after the agreement deadline", async function () {

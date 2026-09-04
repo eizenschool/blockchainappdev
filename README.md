@@ -1,6 +1,8 @@
 # ProofRoute
 
-ProofRoute is a logistics escrow dApp built for the BMIS2003 blockchain assignment. A Shipper creates and funds a delivery agreement with test ETH; the assigned Carrier proves pickup and delivery to unlock progressive payouts. The interface includes both role dashboards, milestone progress, expiry refunds, and an event history read directly from the blockchain.
+ProofRoute is a medical-supply logistics escrow dApp for the BMIS2003 blockchain assignment. A Shipper funds a delivery agreement with test ETH, a Carrier records pickup and delivery photo evidence using IPFS CIDs, and a separately nominated Verifier reviews that evidence before each progressive payout.
+
+The contract stores CIDs, not image files. IPFS provides content addressing and integrity, but it does not prove that a photo is truthful. This is an educational local-network system and must never be used with real money or sensitive evidence.
 
 ## Stack
 
@@ -9,21 +11,14 @@ ProofRoute is a logistics escrow dApp built for the BMIS2003 blockchain assignme
 - React 19 and Vite 8
 - MetaMask and local Hardhat chain ID 31337
 
-See [AGENTS.md](AGENTS.md) for project constraints and [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md) for the lifecycle and architecture.
+See [AGENTS.md](AGENTS.md) for project constraints and [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md) for the lifecycle and module design.
 
-## Install
+## Install and quality checks
 
-Requirements: Node.js 22.13 or newer, npm, Git, and the MetaMask browser extension.
-
-```bash
-npm install
-```
-
-The committed lockfile should be used by other group members with `npm ci` after the first install.
-
-## Test and build
+Requirements: Node.js 22.13 or newer, npm, Git, and MetaMask.
 
 ```bash
+npm ci
 npm test
 npm run frontend:lint
 npm run frontend:build
@@ -31,47 +26,49 @@ npm run frontend:build
 
 ## Run locally
 
-Start the local blockchain in terminal 1:
+Use three terminals:
 
 ```bash
+# terminal 1
 npm run node
-```
 
-Deploy and synchronize the ABI/address in terminal 2:
-
-```bash
+# terminal 2
 npm run deploy:local
-```
 
-Start the interface in terminal 3:
-
-```bash
+# terminal 3
 npm run frontend:dev
 ```
 
-Open the URL shown by Vite. In MetaMask, add a local network using RPC URL `http://127.0.0.1:8545` and chain ID `31337`. Import test accounts only from the currently running Hardhat node. Never use those public development keys for real assets.
+In MetaMask, add RPC URL `http://127.0.0.1:8545` with chain ID `31337`. Import test accounts only from the currently running Hardhat node. Those development keys are public and must never hold real assets.
 
-Run `npm run deploy:local` again whenever the Solidity contract changes or the local Hardhat node restarts. This regenerates `frontend/src/contracts/deployment.json`; refresh the browser afterward.
+Redeploy whenever the contract changes or the local node restarts. Deployment regenerates `frontend/src/contracts/deployment.json`, including the address and ABI; refresh the interface afterward.
 
-## Complete two-wallet demo
+## Three-wallet demonstration
 
-1. Import two accounts printed by the running Hardhat node into MetaMask.
-2. Register account 1 as the Shipper and account 2 as the Carrier.
-3. From the Shipper account, create an agreement addressed to account 2. Keep the pickup and delivery codes somewhere temporary for the demonstration—the app deliberately does not save them.
-4. Switch to the Carrier account and accept the agreement.
-5. Switch to the Shipper and fund the exact escrow amount.
-6. Switch to the Carrier and submit the pickup code. Confirm that the configured first payout is released.
-7. Submit the delivery code. Confirm that the remaining escrow is released and the agreement becomes Completed.
-8. Review the same immutable event history from either account.
+1. Import three local Hardhat accounts into MetaMask.
+2. Register account 1 as Shipper, account 2 as Carrier, and account 3 as Verifier.
+3. In the Shipper dashboard, create a medical-supply agreement using the Carrier and Verifier addresses. Temporarily record both one-time codes outside the app; the interface deliberately does not save them.
+4. Switch to the Carrier, accept the agreement, then switch back to the Shipper and fund the exact test-ETH amount.
+5. Upload a non-sensitive pickup photo to an external IPFS service and paste its CID in the Carrier dashboard. There is no Pinata token or built-in upload feature.
+6. Switch to the nominated Verifier, open the gateway link, review the evidence, and enter the pickup code. Approval releases only the pickup allocation.
+7. Repeat evidence submission and Verifier approval for delivery. The remaining escrow, including rounding remainder, is released and the agreement becomes Completed.
+8. Review the chronological on-chain event history and the Carrier's raw milestone, completion, and funded-expiry counts.
 
-Proof codes become public transaction input when submitted. They are demonstration secrets, not real-world authentication credentials.
+Evidence and submitted proof codes become public blockchain data. Do not upload faces, patient records, addresses, or other private information. Use dummy medical-supply photos for the demonstration.
 
-## Member workflow
+## Branch checkpoints
 
-- Member A branch: `feature/shipper-escrow`
-- Member B branch: `feature/carrier-milestones`
-- Changes to shared enums, structures, events, or public function signatures require both members to coordinate because they change the frontend ABI.
+- `dev`: merged and verified original two-role implementation
+- `baseline/two-role-v1`: safe fallback tag
+- `feature/verifier-evidence`: tested enhanced monolithic checkpoint
+- `module/01-registry`: users, agreements, participant indexes and getters
+- `module/02-escrow-vault`: exact funding and Ether custody
+- `module/03-evidence-settlement`: evidence, Verifier approval and payouts
+- `module/04-expiry-reputation`: cancellation, refunds and factual counters
+- `module/05-frontend-history`: complete modular integration, interface, history, deployment data and documentation
+
+`main` remains unchanged. The Verifier ABI should be merged into `dev` only after the team or tutor accepts the scope change and the manual MetaMask demonstration passes.
 
 ## Assignment integrity
 
-This repository is original work. AI assistance, libraries, documentation, and any other sources should be acknowledged in the written report. Both members must understand and be able to explain their own code during evaluation.
+This repository is original project work. AI assistance, OpenZeppelin, Hardhat, Ethers, React, Vite, IPFS documentation, and all other sources used must be acknowledged in the written report. Both members should understand and be able to explain the code during evaluation.
