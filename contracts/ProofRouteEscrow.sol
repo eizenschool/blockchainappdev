@@ -1,23 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ProofRouteRegistry} from "./modules/ProofRouteRegistry.sol";
+import {ProofRouteEscrowVault} from "./modules/ProofRouteEscrowVault.sol";
 
 /// @title ProofRouteEscrow
 /// @notice Medical-supply logistics agreements with test-Ether escrow, IPFS evidence and independent verification.
-contract ProofRouteEscrow is ProofRouteRegistry {
-    function fundAgreement(uint256 agreementId) external payable agreementExists(agreementId) {
-        Agreement storage agreement = _agreements[agreementId];
-        if (msg.sender != agreement.shipper) revert Unauthorized(msg.sender);
-        if (agreement.status != AgreementStatus.Accepted) revert InvalidAgreementStatus(agreement.status);
-        if (block.timestamp > agreement.deadline) revert DeadlinePassed(agreement.deadline, block.timestamp);
-        if (msg.value != agreement.requiredEscrow) revert IncorrectEscrowAmount(agreement.requiredEscrow, msg.value);
-
-        agreement.fundedAt = uint64(block.timestamp);
-        agreement.status = AgreementStatus.Funded;
-        emit AgreementFunded(agreementId, msg.sender, msg.value, agreement.fundedAt);
-    }
-
+contract ProofRouteEscrow is ProofRouteEscrowVault {
     function submitMilestoneEvidence(uint256 agreementId, MilestoneType milestoneType, string calldata evidenceCid)
         external
         nonReentrant
@@ -94,6 +82,4 @@ contract ProofRouteEscrow is ProofRouteRegistry {
         emit AgreementRefunded(agreementId, agreement.shipper, refundAmount);
     }
 
-    receive() external payable { revert DirectPaymentNotAllowed(); }
-    fallback() external payable { revert DirectPaymentNotAllowed(); }
 }
