@@ -5,7 +5,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 /// @title ProofRouteEscrow
 /// @notice Logistics agreements with test-Ether escrow and hash-verified milestones.
-/// @dev Member A foundation: registration, creation, acceptance, funding, cancellation and expiry refunds.
+/// @dev Complete two-party flow: shipper escrow, carrier milestones, progressive payouts and expiry refunds.
 contract ProofRouteEscrow is ReentrancyGuard {
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant MAX_NAME_LENGTH = 32;
@@ -81,6 +81,9 @@ contract ProofRouteEscrow is ReentrancyGuard {
     error DeadlinePassed(uint256 deadline, uint256 currentTimestamp);
     error DeadlineNotPassed(uint256 deadline, uint256 currentTimestamp);
     error IncorrectEscrowAmount(uint256 expected, uint256 received);
+    error InvalidMilestoneOrder(MilestoneType milestone, AgreementStatus currentStatus);
+    error InvalidMilestoneProof(uint256 agreementId, MilestoneType milestone);
+    error MilestoneAlreadyCompleted(uint256 agreementId, MilestoneType milestone);
     error EtherTransferFailed();
     error DirectPaymentNotAllowed();
 
@@ -239,6 +242,65 @@ contract ProofRouteEscrow is ReentrancyGuard {
         agreement.status = AgreementStatus.Funded;
 
         emit AgreementFunded(agreementId, msg.sender, msg.value, fundedAt);
+    }
+
+    /// @notice Verifies a carrier checkpoint and releases that milestone's escrow payout.
+    /// @dev The plaintext proof becomes public transaction calldata after submission.
+    function submitMilestoneProof(
+        uint256 agreementId,
+        MilestoneType milestoneType,
+        string calldata proofCode
+    ) external nonReentrant agreementExists(agreementId) {
+        Agreement storage agreement = _agreements[agreementId];
+        if (msg.sender != agreement.carrier) revert Unauthorized(msg.sender);
+        _requireRole(msg.sender, Role.Carrier);
+
+        Milestone storage milestone = _milestones[agreementId][milestoneType];
+        if (milestone.completed) revert MilestoneAlreadyCompleted(agreementId, milestoneType);
+        if (block.timestamp > agreement.deadline) {
+            revert DeadlinePassed(agreement.deadline, block.timestamp);
+        }
+
+        if (milestoneType == MilestoneType.Pickup) {
+            if (agreement.status != AgreementStatus.Funded) {
+                revert InvalidMilestoneOrder(milestoneType, agreement.status);
+            }
+        } else if (
+            agreement.status != AgreementStatus.PartiallyCompleted ||
+            !_milestones[agreementId][MilestoneType.Pickup].completed
+        ) {
+            revert InvalidMilestoneOrder(milestoneType, agreement.status);
+        }
+
+        if (keccak256(bytes(proofCode)) != milestone.proofHash) {
+            revert InvalidMilestoneProof(agreementId, milestoneType);
+        }
+
+        uint64 verifiedAt = uint64(block.timestamp);
+        uint256 payoutAmount;
+
+        if (milestoneType == MilestoneType.Pickup) {
+            payoutAmount = (agreement.requiredEscrow * milestone.payoutBps) / BPS_DENOMINATOR;
+            agreement.status = AgreementStatus.PartiallyCompleted;
+        } else {
+            // Delivery receives every remaining wei so integer division cannot strand dust.
+            payoutAmount = agreement.requiredEscrow - agreement.releasedAmount;
+            agreement.status = AgreementStatus.Completed;
+        }
+
+        // Checks-effects-interactions: all effects revert if the carrier cannot receive Ether.
+        milestone.completed = true;
+        milestone.completedAt = verifiedAt;
+        agreement.releasedAmount += payoutAmount;
+
+        (bool success, ) = payable(agreement.carrier).call{value: payoutAmount}("");
+        if (!success) revert EtherTransferFailed();
+
+        emit MilestoneVerified(agreementId, milestoneType, agreement.carrier, verifiedAt);
+        emit EscrowReleased(agreementId, milestoneType, agreement.carrier, payoutAmount);
+        if (milestoneType == MilestoneType.Delivery) {
+            emit AgreementCompleted(agreementId, verifiedAt);
+        }
     }
 
     function cancelAgreement(uint256 agreementId) external agreementExists(agreementId) {

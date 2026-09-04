@@ -1,6 +1,6 @@
 # ProofRoute
 
-ProofRoute is a logistics escrow dApp built for the BMIS2003 blockchain assignment. A Shipper creates and funds a delivery agreement with test ETH; a Carrier later proves pickup and delivery to unlock progressive payouts. Member A's foundation implements wallet registration, agreement creation and acceptance, exact escrow funding, pre-funding cancellation, and deterministic expiry refunds.
+ProofRoute is a logistics escrow dApp built for the BMIS2003 blockchain assignment. A Shipper creates and funds a delivery agreement with test ETH; the assigned Carrier proves pickup and delivery to unlock progressive payouts. The interface includes both role dashboards, milestone progress, expiry refunds, and an event history read directly from the blockchain.
 
 ## Stack
 
@@ -51,10 +51,25 @@ npm run frontend:dev
 
 Open the URL shown by Vite. In MetaMask, add a local network using RPC URL `http://127.0.0.1:8545` and chain ID `31337`. Import test accounts only from the currently running Hardhat node. Never use those public development keys for real assets.
 
+Run `npm run deploy:local` again whenever the Solidity contract changes or the local Hardhat node restarts. This regenerates `frontend/src/contracts/deployment.json`; refresh the browser afterward.
+
+## Complete two-wallet demo
+
+1. Import two accounts printed by the running Hardhat node into MetaMask.
+2. Register account 1 as the Shipper and account 2 as the Carrier.
+3. From the Shipper account, create an agreement addressed to account 2. Keep the pickup and delivery codes somewhere temporary for the demonstration—the app deliberately does not save them.
+4. Switch to the Carrier account and accept the agreement.
+5. Switch to the Shipper and fund the exact escrow amount.
+6. Switch to the Carrier and submit the pickup code. Confirm that the configured first payout is released.
+7. Submit the delivery code. Confirm that the remaining escrow is released and the agreement becomes Completed.
+8. Review the same immutable event history from either account.
+
+Proof codes become public transaction input when submitted. They are demonstration secrets, not real-world authentication credentials.
+
 ## Member workflow
 
 - Member A branch: `feature/shipper-escrow`
-- Member B branch after foundation review: `feature/carrier-milestones`
+- Member B branch: `feature/carrier-milestones`
 - Changes to shared enums, structures, events, or public function signatures require both members to coordinate because they change the frontend ABI.
 
 ## Assignment integrity

@@ -81,6 +81,10 @@ export function explainWalletError(error) {
     DeadlinePassed: "The agreement deadline has already passed.",
     DeadlineNotPassed: "The refund is available only after the deadline.",
     InvalidAgreementStatus: "That action is not allowed in the agreement's current state.",
+    InvalidMilestoneOrder: "Complete the required earlier step before submitting this proof.",
+    InvalidMilestoneProof: "The proof code does not match the code prepared by the Shipper.",
+    MilestoneAlreadyCompleted: "That milestone has already been verified and paid.",
+    EtherTransferFailed: "The Ether transfer failed, so the blockchain change was rolled back.",
     Unauthorized: "The connected wallet is not authorized for that action.",
   };
 

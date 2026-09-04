@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, getAddress, id, isAddress, parseEther } from "ethers";
+import CarrierDashboard from "./components/CarrierDashboard.jsx";
+import EventHistory from "./components/EventHistory.jsx";
+import { loadAgreementHistory } from "./lib/history.js";
 import {
   LOCAL_CHAIN_ID,
   createContract,
@@ -50,6 +53,7 @@ function App() {
   const [contract, setContract] = useState(null);
   const [user, setUser] = useState(null);
   const [agreements, setAgreements] = useState([]);
+  const [history, setHistory] = useState([]);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
   const [registration, setRegistration] = useState({ displayName: "", role: ROLES.SHIPPER });
@@ -66,6 +70,7 @@ function App() {
 
     if (Number(nextUser.role) === ROLES.NONE) {
       setAgreements([]);
+      setHistory([]);
       return;
     }
 
@@ -81,6 +86,7 @@ function App() {
       }),
     );
     setAgreements(records);
+    setHistory(await loadAgreementHistory(activeContract, agreementIds));
   }, []);
 
   const syncWallet = useCallback(
@@ -94,6 +100,7 @@ function App() {
           setContract(null);
           setUser(null);
           setAgreements([]);
+          setHistory([]);
           return;
         }
 
@@ -220,6 +227,20 @@ function App() {
       `Agreement #${agreement.id} funded with test ETH.`,
     );
 
+  const acceptAgreement = (agreement) =>
+    runTransaction(
+      `accept-${agreement.id}`,
+      () => contract.acceptAgreement(agreement.id),
+      `Agreement #${agreement.id} accepted. The Shipper can now fund the escrow.`,
+    );
+
+  const submitMilestoneProof = (agreement, milestone, proofCode) =>
+    runTransaction(
+      `proof-${agreement.id}-${milestone}`,
+      () => contract.submitMilestoneProof(agreement.id, milestone, proofCode),
+      `${milestone === 0 ? "Pickup" : "Delivery"} proof verified and payout released for agreement #${agreement.id}.`,
+    );
+
   const cancelAgreement = (agreement) =>
     runTransaction(
       `cancel-${agreement.id}`,
@@ -271,7 +292,7 @@ function App() {
             </p>
           </div>
           <div className="hero-flow" aria-label="Agreement flow">
-            <span>Create</span><i>→</i><span>Accept</span><i>→</i><span>Fund</span><i>→</i><span>Deliver</span>
+            <span>Create</span><i>→</i><span>Accept</span><i>→</i><span>Fund</span><i>→</i><span>Pickup</span><i>→</i><span>Deliver</span>
           </div>
         </section>
 
@@ -335,11 +356,15 @@ function App() {
         )}
 
         {contract && role === ROLES.CARRIER && (
-          <section className="panel empty-state">
-            <p className="eyebrow">Carrier account</p>
-            <h2>Welcome, {user.displayName}</h2>
-            <p>Your wallet is registered. Carrier acceptance, proof verification, and payout screens belong to Member B's module.</p>
-          </section>
+          <CarrierDashboard
+            user={user}
+            agreements={agreements}
+            busy={busy}
+            onRefresh={() => loadContractData(contract, account)}
+            onAccept={acceptAgreement}
+            onSubmitProof={submitMilestoneProof}
+            onRefund={refundAgreement}
+          />
         )}
 
         {contract && role === ROLES.SHIPPER && (
@@ -436,9 +461,19 @@ function App() {
                           <dl className="agreement-details">
                             <div><dt>Carrier</dt><dd title={agreement.carrier}>{shortAddress(agreement.carrier)}</dd></div>
                             <div><dt>Escrow</dt><dd>{formatEther(agreement.requiredEscrow)} ETH</dd></div>
+                            <div><dt>Released</dt><dd>{formatEther(agreement.releasedAmount)} ETH</dd></div>
                             <div><dt>Deadline</dt><dd>{formatDate(agreement.deadline)}</dd></div>
                             <div><dt>Split</dt><dd>{Number(pickup.payoutBps) / 100}% / {Number(delivery.payoutBps) / 100}%</dd></div>
                           </dl>
+                          <div className="milestone-progress" aria-label="Milestone progress">
+                            <span className={status >= 1 && status <= 5 ? "complete" : ""}>Accepted</span>
+                            <i>→</i>
+                            <span className={status >= 2 && status <= 5 ? "complete" : ""}>Funded</span>
+                            <i>→</i>
+                            <span className={pickup.completed ? "complete" : ""}>Pickup</span>
+                            <i>→</i>
+                            <span className={delivery.completed ? "complete" : ""}>Delivery</span>
+                          </div>
                           <div className="card-actions">
                             {status === 0 && <span className="action-hint">Waiting for carrier acceptance</span>}
                             {status === 1 && !expired && (
@@ -467,6 +502,8 @@ function App() {
             </section>
           </div>
         )}
+
+        {contract && role !== ROLES.NONE && <EventHistory entries={history} />}
       </main>
 
       <footer>
