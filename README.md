@@ -1,6 +1,6 @@
 # ProofRoute
 
-ProofRoute is a medical-supply logistics escrow dApp for the BMIS2003 blockchain assignment. A Shipper funds a delivery agreement with test ETH, a Carrier records pickup and delivery photo evidence using IPFS CIDs, and a separately nominated Verifier reviews that evidence before each progressive payout.
+ProofRoute is a hospital medical-supply logistics escrow dApp for the BMIS2003 blockchain assignment. A Shipper coordinates and funds a hospital delivery with test ETH, a Carrier transports the supplies and records photo evidence using IPFS CIDs, and a separately nominated Verifier acts as the receiving inspector before each progressive payout.
 
 The contract stores CIDs, not image files. IPFS provides content addressing and integrity, but it does not prove that a photo is truthful. This is an educational local-network system and must never be used with real money or sensitive evidence.
 

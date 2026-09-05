@@ -55,7 +55,7 @@ export default function VerifierDashboard({ user, agreements, busy, onRefresh, o
   return (
     <div className="dashboard verifier-dashboard">
       <section className="dashboard-heading">
-        <div><p className="eyebrow">Verifier dashboard</p><h2>Welcome back, {user.displayName}</h2></div>
+        <div><p className="eyebrow">Verifier · Receiving inspector</p><h2>Welcome back, {user.displayName}</h2></div>
         <button className="button button-secondary" onClick={onRefresh}>Refresh blockchain data</button>
       </section>
 
@@ -67,12 +67,12 @@ export default function VerifierDashboard({ user, agreements, busy, onRefresh, o
 
       <section className="agreement-section">
         <div className="section-title">
-          <div><p className="eyebrow">Independent checks</p><h3>Evidence approval queue</h3></div>
+          <div><p className="eyebrow">Hospital delivery checks</p><h3>Evidence approval queue</h3></div>
           <span className="count-pill">{agreements.length}</span>
         </div>
 
         {agreements.length === 0 ? (
-          <div className="panel empty-state small-empty"><h4>No assigned agreements</h4><p>A Shipper must nominate this Verifier wallet when creating an agreement.</p></div>
+          <div className="panel empty-state small-empty"><h4>No assigned deliveries</h4><p>A hospital supply coordinator must nominate this Verifier wallet when creating an agreement.</p></div>
         ) : (
           <div className="carrier-agreement-grid">
             {agreements.map(({ agreement, pickup, delivery }) => {

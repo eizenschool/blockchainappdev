@@ -188,9 +188,9 @@ function App() {
       return "The Carrier and Verifier must use different wallets.";
     }
     if (!agreementForm.cargo.trim() || !agreementForm.origin.trim() || !agreementForm.destination.trim()) {
-      return "Cargo, origin, and destination are required.";
+      return "Medical supplies, origin, and hospital destination are required.";
     }
-    if (agreementForm.cargo.trim().length > 120) return "Cargo description must be 120 characters or fewer.";
+    if (agreementForm.cargo.trim().length > 120) return "Medical-supply description must be 120 characters or fewer.";
     if (agreementForm.origin.trim().length > 80 || agreementForm.destination.trim().length > 80) {
       return "Origin and destination must each be 80 characters or fewer.";
     }
@@ -314,10 +314,10 @@ function App() {
       <main id="top">
         <section className="hero">
           <div>
-            <p className="eyebrow">Ethereum logistics escrow</p>
-            <h1>Move cargo with <span>proof, not promises.</span></h1>
+            <p className="eyebrow">Hospital supply escrow</p>
+            <h1>Deliver medical supplies with <span>proof, not promises.</span></h1>
             <p className="hero-copy">
-              Create delivery agreements, lock test ETH safely, and keep every state change visible on-chain.
+              Coordinate hospital supply deliveries, secure test ETH in escrow, and verify every handoff on-chain.
             </p>
           </div>
           <div className="hero-flow" aria-label="Agreement flow">
@@ -373,9 +373,9 @@ function App() {
                   value={registration.role}
                   onChange={(event) => setRegistration({ ...registration, role: Number(event.target.value) })}
                 >
-                  <option value={ROLES.SHIPPER}>Shipper — creates and funds jobs</option>
-                  <option value={ROLES.CARRIER}>Carrier — transports cargo</option>
-                  <option value={ROLES.VERIFIER}>Verifier — reviews evidence and approves milestones</option>
+                  <option value={ROLES.SHIPPER}>Shipper — coordinates and funds hospital deliveries</option>
+                  <option value={ROLES.CARRIER}>Carrier — transports medical supplies</option>
+                  <option value={ROLES.VERIFIER}>Verifier — reviews hospital delivery evidence</option>
                 </select>
               </label>
               <button className="button button-primary" disabled={busy === "register"}>
@@ -413,7 +413,7 @@ function App() {
           <div className="dashboard">
             <section className="dashboard-heading">
               <div>
-                <p className="eyebrow">Shipper dashboard</p>
+                <p className="eyebrow">Shipper · Hospital supply coordinator</p>
                 <h2>Welcome back, {user.displayName}</h2>
               </div>
               <button className="button button-secondary" onClick={() => loadContractData(contract, account)}>
@@ -430,7 +430,7 @@ function App() {
             <section className="content-grid">
               <article className="panel create-panel">
                 <div className="section-title">
-                  <div><p className="eyebrow">New shipment</p><h3>Create an agreement</h3></div>
+                  <div><p className="eyebrow">New medical delivery</p><h3>Create a supply agreement</h3></div>
                   <span className="step-pill">Step 1 of 3</span>
                 </div>
                 <form className="form-grid" onSubmit={handleCreateAgreement}>
@@ -443,7 +443,7 @@ function App() {
                     <input value={agreementForm.verifier} onChange={(event) => setAgreementForm({ ...agreementForm, verifier: event.target.value })} placeholder="0x…" />
                   </label>
                   <label className="field-full">
-                    Cargo description
+                    Medical supplies
                     <input maxLength="120" value={agreementForm.cargo} onChange={(event) => setAgreementForm({ ...agreementForm, cargo: event.target.value })} placeholder="e.g. Temperature-controlled medicine" />
                   </label>
                   <label>
@@ -491,7 +491,7 @@ function App() {
                   <span className="count-pill">{agreements.length}</span>
                 </div>
                 {agreements.length === 0 ? (
-                  <div className="panel empty-state small-empty"><h4>No agreements yet</h4><p>Create your first shipment agreement using the form.</p></div>
+                  <div className="panel empty-state small-empty"><h4>No agreements yet</h4><p>Create your first hospital supply agreement using the form.</p></div>
                 ) : (
                   <div className="agreement-list">
                     {agreements.map(({ agreement, pickup, delivery }) => {

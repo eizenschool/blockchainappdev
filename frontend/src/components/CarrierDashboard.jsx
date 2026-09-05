@@ -75,7 +75,7 @@ export default function CarrierDashboard({
   return (
     <div className="dashboard carrier-dashboard">
       <section className="dashboard-heading">
-        <div><p className="eyebrow">Carrier dashboard</p><h2>Welcome back, {user.displayName}</h2></div>
+        <div><p className="eyebrow">Carrier · Medical courier</p><h2>Welcome back, {user.displayName}</h2></div>
         <button className="button button-secondary" onClick={onRefresh}>Refresh blockchain data</button>
       </section>
 
@@ -88,12 +88,12 @@ export default function CarrierDashboard({
 
       <section className="agreement-section">
         <div className="section-title">
-          <div><p className="eyebrow">Assigned shipments</p><h3>Carrier workflow</h3></div>
+          <div><p className="eyebrow">Assigned medical deliveries</p><h3>Medical courier workflow</h3></div>
           <span className="count-pill">{agreements.length}</span>
         </div>
 
         {agreements.length === 0 ? (
-          <div className="panel empty-state small-empty"><h4>No assigned agreements</h4><p>A Shipper must create an agreement using this Carrier wallet address.</p></div>
+          <div className="panel empty-state small-empty"><h4>No assigned deliveries</h4><p>A hospital supply coordinator must create an agreement using this Carrier wallet address.</p></div>
         ) : (
           <div className="carrier-agreement-grid">
             {agreements.map(({ agreement, pickup, delivery }) => {
