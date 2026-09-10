@@ -61,6 +61,7 @@ function App() {
     completedAgreements: 0n,
     expiredFundedAgreements: 0n,
   });
+  const [chainTimestamp, setChainTimestamp] = useState(0);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
   const [registration, setRegistration] = useState({ displayName: "", role: ROLES.SHIPPER });
@@ -72,6 +73,8 @@ function App() {
   const role = Number(user?.role ?? 0);
 
   const loadContractData = useCallback(async (activeContract, activeAccount) => {
+    const latestBlock = await activeContract.runner.provider.getBlock("latest");
+    setChainTimestamp(Number(latestBlock.timestamp));
     const nextUser = await activeContract.getUser(activeAccount);
     setUser(nextUser);
 
@@ -114,6 +117,7 @@ function App() {
           setUser(null);
           setAgreements([]);
           setHistory([]);
+          setChainTimestamp(0);
           setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
           return;
         }
@@ -194,7 +198,10 @@ function App() {
     if (agreementForm.origin.trim().length > 80 || agreementForm.destination.trim().length > 80) {
       return "Origin and destination must each be 80 characters or fewer.";
     }
-    if (!agreementForm.deadline || new Date(agreementForm.deadline).getTime() <= Date.now()) {
+    if (
+      !agreementForm.deadline
+      || Math.floor(new Date(agreementForm.deadline).getTime() / 1000) <= chainTimestamp
+    ) {
       return "Choose a deadline in the future.";
     }
     const pickupPercent = Number(agreementForm.pickupPercent);
@@ -390,6 +397,7 @@ function App() {
             user={user}
             agreements={agreements}
             stats={carrierStats}
+            chainTimestamp={chainTimestamp}
             busy={busy}
             onRefresh={() => loadContractData(contract, account)}
             onAccept={acceptAgreement}
@@ -402,6 +410,7 @@ function App() {
           <VerifierDashboard
             user={user}
             agreements={agreements}
+            chainTimestamp={chainTimestamp}
             busy={busy}
             onRefresh={() => loadContractData(contract, account)}
             onApprove={approveMilestone}
@@ -496,7 +505,7 @@ function App() {
                   <div className="agreement-list">
                     {agreements.map(({ agreement, pickup, delivery }) => {
                       const status = Number(agreement.status);
-                      const expired = Date.now() / 1000 > Number(agreement.deadline);
+                      const expired = chainTimestamp > Number(agreement.deadline);
                       return (
                         <article className="agreement-card" key={agreement.id.toString()}>
                           <div className="agreement-card-head">

@@ -20,7 +20,7 @@ function gatewayUrl(cid) {
   return `https://ipfs.io/ipfs/${encodeURIComponent(cid)}`;
 }
 
-export default function VerifierDashboard({ user, agreements, busy, onRefresh, onApprove, onRefund }) {
+export default function VerifierDashboard({ user, agreements, chainTimestamp, busy, onRefresh, onApprove, onRefund }) {
   const [proofCodes, setProofCodes] = useState({});
   const [proofErrors, setProofErrors] = useState({});
 
@@ -77,7 +77,7 @@ export default function VerifierDashboard({ user, agreements, busy, onRefresh, o
           <div className="carrier-agreement-grid">
             {agreements.map(({ agreement, pickup, delivery }) => {
               const status = Number(agreement.status);
-              const expired = Date.now() / 1000 > Number(agreement.deadline);
+              const expired = chainTimestamp > Number(agreement.deadline);
               const activeMilestone = status === 2 ? 0 : 1;
               const activeRecord = activeMilestone === 0 ? pickup : delivery;
               const key = approvalKey(agreement.id, activeMilestone);

@@ -37,6 +37,7 @@ export default function CarrierDashboard({
   user,
   agreements,
   stats,
+  chainTimestamp,
   busy,
   onRefresh,
   onAccept,
@@ -98,7 +99,7 @@ export default function CarrierDashboard({
           <div className="carrier-agreement-grid">
             {agreements.map(({ agreement, pickup, delivery }) => {
               const status = Number(agreement.status);
-              const expired = Date.now() / 1000 > Number(agreement.deadline);
+              const expired = chainTimestamp > Number(agreement.deadline);
               const activeMilestone = status === 2 ? 0 : 1;
               const activeRecord = activeMilestone === 0 ? pickup : delivery;
               const key = evidenceKey(agreement.id, activeMilestone);
