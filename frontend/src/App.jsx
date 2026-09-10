@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, getAddress, id, isAddress, parseEther } from "ethers";
+import AppNavigation from "./components/AppNavigation.jsx";
 import CarrierDashboard from "./components/CarrierDashboard.jsx";
+import { HowItWorks, RolesAndSafety } from "./components/EducationViews.jsx";
 import EventHistory from "./components/EventHistory.jsx";
 import VerifierDashboard from "./components/VerifierDashboard.jsx";
+import { MALAYSIA_LOCATIONS, generateProofCodes } from "./lib/agreementForm.js";
 import { loadAgreementHistory } from "./lib/history.js";
 import {
   LOCAL_CHAIN_ID,
@@ -15,6 +18,16 @@ import {
 } from "./lib/web3.js";
 
 const ROLES = Object.freeze({ NONE: 0, SHIPPER: 1, CARRIER: 2, VERIFIER: 3 });
+const SUPPLY_CATEGORIES = [
+  "Vaccines",
+  "Temperature-controlled medicines",
+  "General medicines",
+  "Blood and plasma products",
+  "Personal protective equipment",
+  "Surgical equipment",
+  "Diagnostic test kits",
+  "Medical oxygen supplies",
+];
 const STATUS_LABELS = [
   "Created",
   "Accepted",
@@ -49,7 +62,22 @@ function formatDate(timestamp) {
   }).format(new Date(Number(timestamp) * 1000));
 }
 
+function MalaysiaLocationOptions({ placeholder }) {
+  return (
+    <>
+      <option value="" disabled>{placeholder}</option>
+      <optgroup label="States">
+        {MALAYSIA_LOCATIONS.states.map((location) => <option key={location} value={location}>{location}</option>)}
+      </optgroup>
+      <optgroup label="Federal territories">
+        {MALAYSIA_LOCATIONS.federalTerritories.map((location) => <option key={location} value={location}>{location}</option>)}
+      </optgroup>
+    </>
+  );
+}
+
 function App() {
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [account, setAccount] = useState("");
   const [chainId, setChainId] = useState(null);
   const [contract, setContract] = useState(null);
@@ -64,6 +92,7 @@ function App() {
   const [chainTimestamp, setChainTimestamp] = useState(0);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
+  const [proofCodeFeedback, setProofCodeFeedback] = useState(null);
   const [registration, setRegistration] = useState({ displayName: "", role: ROLES.SHIPPER });
   const [agreementForm, setAgreementForm] = useState(emptyAgreementForm);
 
@@ -198,6 +227,9 @@ function App() {
     if (agreementForm.origin.trim().length > 80 || agreementForm.destination.trim().length > 80) {
       return "Origin and destination must each be 80 characters or fewer.";
     }
+    if (agreementForm.origin === agreementForm.destination) {
+      return "Origin and destination must be different.";
+    }
     if (
       !agreementForm.deadline
       || Math.floor(new Date(agreementForm.deadline).getTime() / 1000) <= chainTimestamp
@@ -246,7 +278,38 @@ function App() {
       "Agreement created. Give both one-time codes only to the nominated Verifier.",
     );
 
-    if (succeeded) setAgreementForm(emptyAgreementForm());
+    if (succeeded) {
+      setAgreementForm(emptyAgreementForm());
+      setProofCodeFeedback(null);
+    }
+  };
+
+  const handleGenerateProofCodes = () => {
+    try {
+      const codes = generateProofCodes();
+      setAgreementForm((current) => ({ ...current, ...codes }));
+      setProofCodeFeedback({ type: "success", text: "Two new proof codes were generated locally. Record both before creating the agreement." });
+    } catch (error) {
+      setProofCodeFeedback({ type: "error", text: error.message });
+    }
+  };
+
+  const copyProofCode = async (label, code) => {
+    if (!code) {
+      setProofCodeFeedback({ type: "error", text: "Generate the proof codes before copying them." });
+      return;
+    }
+    if (!navigator.clipboard?.writeText) {
+      setProofCodeFeedback({ type: "error", text: "Clipboard access is unavailable. Use a browser that supports secure clipboard copying." });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(code);
+      setProofCodeFeedback({ type: "success", text: `${label} proof code copied. Paste it somewhere safe before continuing.` });
+    } catch {
+      setProofCodeFeedback({ type: "error", text: "The browser blocked clipboard access. Allow clipboard access and try again." });
+    }
   };
 
   const fundAgreement = (agreement) =>
@@ -303,7 +366,7 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="ProofRoute home">
+        <a className="brand" href="#top" aria-label="ProofRoute home" onClick={() => setActiveTab("dashboard")}>
           <span className="brand-mark" aria-hidden="true">PR</span>
           <span>ProofRoute</span>
         </a>
@@ -318,19 +381,28 @@ function App() {
         </div>
       </header>
 
+      <AppNavigation activeTab={activeTab} onChange={setActiveTab} />
+
       <main id="top">
-        <section className="hero">
-          <div>
+        <section
+          id="panel-dashboard"
+          className="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-dashboard"
+          hidden={activeTab !== "dashboard"}
+        >
+          <header className="page-intro dashboard-intro">
+            <div>
             <p className="eyebrow">Hospital supply escrow</p>
-            <h1>Deliver medical supplies with <span>proof, not promises.</span></h1>
-            <p className="hero-copy">
-              Coordinate hospital supply deliveries, secure test ETH in escrow, and verify every handoff on-chain.
-            </p>
-          </div>
-          <div className="hero-flow" aria-label="Agreement flow">
-            <span>Create</span><i>→</i><span>Accept</span><i>→</i><span>Fund</span><i>→</i><span>Pickup</span><i>→</i><span>Deliver</span>
-          </div>
-        </section>
+              <h1>Verified delivery. Controlled payment.</h1>
+              <p>Coordinate medical-supply deliveries, protect test ETH in escrow, and record every handoff on-chain.</p>
+            </div>
+            <div className="network-card" aria-label="Development network information">
+              <span className="network-card-label">Environment</span>
+              <strong>Hardhat Local</strong>
+              <small>Chain ID 31337 · Test ETH only</small>
+            </div>
+          </header>
 
         {!walletInstalled && (
           <section className="panel empty-state">
@@ -453,15 +525,26 @@ function App() {
                   </label>
                   <label className="field-full">
                     Medical supplies
-                    <input maxLength="120" value={agreementForm.cargo} onChange={(event) => setAgreementForm({ ...agreementForm, cargo: event.target.value })} placeholder="e.g. Temperature-controlled medicine" />
+                    <select
+                      required
+                      value={agreementForm.cargo}
+                      onChange={(event) => setAgreementForm({ ...agreementForm, cargo: event.target.value })}
+                    >
+                      <option value="" disabled>Select a medical-supply category</option>
+                      {SUPPLY_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                    </select>
                   </label>
                   <label>
                     Origin
-                    <input maxLength="80" value={agreementForm.origin} onChange={(event) => setAgreementForm({ ...agreementForm, origin: event.target.value })} placeholder="Kuala Lumpur" />
+                    <select required value={agreementForm.origin} onChange={(event) => setAgreementForm({ ...agreementForm, origin: event.target.value })}>
+                      <MalaysiaLocationOptions placeholder="Select an origin" />
+                    </select>
                   </label>
                   <label>
                     Destination
-                    <input maxLength="80" value={agreementForm.destination} onChange={(event) => setAgreementForm({ ...agreementForm, destination: event.target.value })} placeholder="Penang" />
+                    <select required value={agreementForm.destination} onChange={(event) => setAgreementForm({ ...agreementForm, destination: event.target.value })}>
+                      <MalaysiaLocationOptions placeholder="Select a destination" />
+                    </select>
                   </label>
                   <label>
                     Escrow (test ETH)
@@ -479,15 +562,28 @@ function App() {
                     <span>Delivery payout</span>
                     <strong>{100 - (Number(agreementForm.pickupPercent) || 0)}%</strong>
                   </div>
+                  <div className="proof-code-toolbar field-full">
+                    <div><strong>Milestone proof codes</strong><span>Generate two distinct demonstration OTPs.</span></div>
+                    <button className="button button-secondary button-small" type="button" onClick={handleGenerateProofCodes}>
+                      {agreementForm.pickupCode ? "Regenerate proof codes" : "Generate proof codes"}
+                    </button>
+                  </div>
                   <label>
                     Pickup proof code
-                    <input type="password" autoComplete="off" value={agreementForm.pickupCode} onChange={(event) => setAgreementForm({ ...agreementForm, pickupCode: event.target.value })} placeholder="One-time secret" />
+                    <div className="input-action">
+                      <input type="password" inputMode="numeric" autoComplete="off" readOnly value={agreementForm.pickupCode} placeholder="Generate first" aria-describedby="proof-code-guidance" />
+                      <button type="button" disabled={!agreementForm.pickupCode} onClick={() => copyProofCode("Pickup", agreementForm.pickupCode)}>Copy</button>
+                    </div>
                   </label>
                   <label>
                     Delivery proof code
-                    <input type="password" autoComplete="off" value={agreementForm.deliveryCode} onChange={(event) => setAgreementForm({ ...agreementForm, deliveryCode: event.target.value })} placeholder="Different one-time secret" />
+                    <div className="input-action">
+                      <input type="password" inputMode="numeric" autoComplete="off" readOnly value={agreementForm.deliveryCode} placeholder="Generate first" aria-describedby="proof-code-guidance" />
+                      <button type="button" disabled={!agreementForm.deliveryCode} onClick={() => copyProofCode("Delivery", agreementForm.deliveryCode)}>Copy</button>
+                    </div>
                   </label>
-                  <p className="security-note field-full">Only each code's hash is saved during creation. Give the plaintext codes only to the nominated Verifier; they are cleared after confirmation and cannot be recovered.</p>
+                  {proofCodeFeedback && <p className={`proof-code-feedback ${proofCodeFeedback.type}`} role="status" aria-live="polite">{proofCodeFeedback.text}</p>}
+                  <p id="proof-code-guidance" className="security-note field-full">Record both six-digit codes before creating the agreement and give them only to the nominated Verifier. The app saves only their hashes during creation and clears the plaintext codes after confirmation.</p>
                   <button className="button button-primary field-full" disabled={busy === "create"}>
                     {busy === "create" ? "Creating agreement…" : "Create agreement"}
                   </button>
@@ -559,7 +655,28 @@ function App() {
           </div>
         )}
 
-        {contract && role !== ROLES.NONE && <EventHistory entries={history} />}
+          {contract && role !== ROLES.NONE && <EventHistory entries={history} />}
+        </section>
+
+        <section
+          id="panel-how-it-works"
+          className="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-how-it-works"
+          hidden={activeTab !== "how-it-works"}
+        >
+          <HowItWorks />
+        </section>
+
+        <section
+          id="panel-roles-safety"
+          className="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-roles-safety"
+          hidden={activeTab !== "roles-safety"}
+        >
+          <RolesAndSafety />
+        </section>
       </main>
 
       <footer>

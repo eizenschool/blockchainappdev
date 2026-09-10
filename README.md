@@ -47,7 +47,7 @@ Redeploy whenever the contract changes or the local node restarts. Deployment re
 
 1. Import three local Hardhat accounts into MetaMask.
 2. Register account 1 as Shipper, account 2 as Carrier, and account 3 as Verifier.
-3. In the Shipper dashboard, create a medical-supply agreement using the Carrier and Verifier addresses. Temporarily record both one-time codes outside the app; the interface deliberately does not save them.
+3. In the Shipper dashboard, choose Malaysian origin and destination regions, then generate the two six-digit demonstration proof codes. Copy and record both codes outside the app before creating the agreement; the interface clears them after confirmation and deliberately does not save them.
 4. Switch to the Carrier, accept the agreement, then switch back to the Shipper and fund the exact test-ETH amount.
 5. Upload a non-sensitive pickup photo to an external IPFS service and paste its CID in the Carrier dashboard. There is no Pinata token or built-in upload feature.
 6. Switch to the nominated Verifier, open the gateway link, review the evidence, and enter the pickup code. Approval releases only the pickup allocation.
@@ -55,6 +55,8 @@ Redeploy whenever the contract changes or the local node restarts. Deployment re
 8. Review the chronological on-chain event history and the Carrier's raw milestone, completion, and funded-expiry counts.
 
 Evidence and submitted proof codes become public blockchain data. Do not upload faces, patient records, addresses, or other private information. Use dummy medical-supply photos for the demonstration.
+
+The generated six-digit proof codes are convenient for a classroom demonstration, not production authentication. Only their hashes are stored during agreement creation, and the plaintext codes should be shared solely with the nominated Verifier.
 
 ## Branch checkpoints
 
