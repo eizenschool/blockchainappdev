@@ -71,26 +71,27 @@ export function explainWalletError(error) {
     error?.message ||
     "The transaction could not be completed.";
 
-  const friendlyCustomErrors = {
-    AlreadyRegistered: "This wallet is already registered.",
-    InvalidRole: "This wallet does not have the required role.",
-    InvalidCarrier: "The carrier wallet is not registered as a Carrier.",
-    InvalidVerifier: "The Verifier wallet must be registered as a Verifier and differ from both participants.",
-    SelfAssignment: "A shipper cannot also be the carrier for the same agreement.",
-    InvalidDeadline: "Choose a deadline in the future.",
-    IncorrectEscrowAmount: "The escrow deposit must exactly match the agreement amount.",
-    DeadlinePassed: "The agreement deadline has already passed.",
-    DeadlineNotPassed: "The refund is available only after the deadline.",
-    InvalidAgreementStatus: "That action is not allowed in the agreement's current state.",
-    InvalidMilestoneOrder: "Complete the required earlier step before submitting evidence or approval.",
-    InvalidMilestoneProof: "The proof code does not match the code prepared by the Shipper.",
-    MilestoneAlreadyCompleted: "That milestone has already been verified and paid.",
-    InvalidEvidenceCid: "The evidence CID must contain 1 to 128 characters.",
-    EvidenceNotSubmitted: "The Carrier must submit evidence before the Verifier can approve this milestone.",
-    EtherTransferFailed: "The Ether transfer failed, so the blockchain change was rolled back.",
-    Unauthorized: "The connected wallet is not authorized for that action.",
+  const friendlyRevertReasons = {
+    "Wallet is already registered": "This wallet is already registered.",
+    "Wallet has the wrong role": "This wallet does not have the required role.",
+    "Carrier must be registered as Carrier": "The carrier wallet is not registered as a Carrier.",
+    "Verifier must be registered and different": "The Verifier wallet must be registered as a Verifier and differ from both participants.",
+    "Shipper and Carrier must be different": "A Shipper cannot also be the Carrier for the same agreement.",
+    "Deadline must be in the future": "Choose a deadline in the future.",
+    "Exact escrow amount is required": "The escrow deposit must exactly match the agreement amount.",
+    "Agreement deadline has passed": "The agreement deadline has already passed.",
+    "Agreement deadline has not passed": "The refund is available only after the deadline.",
+    "Pickup requires a funded agreement": "Fund the agreement before submitting pickup evidence or approval.",
+    "Delivery requires approved pickup": "Approve pickup before submitting delivery evidence or approval.",
+    "Proof code is incorrect": "The proof code does not match the code prepared by the Shipper.",
+    "Milestone is already completed": "That milestone has already been verified and paid.",
+    "Evidence CID must be 1 to 128 characters": "The evidence CID must contain 1 to 128 characters.",
+    "Evidence must be submitted before approval": "The Carrier must submit evidence before the Verifier can approve this milestone.",
+    "Ether transfer failed": "The Ether transfer failed, so the blockchain change was rolled back.",
   };
 
-  const matchingName = Object.keys(friendlyCustomErrors).find((name) => rawMessage.includes(name));
-  return matchingName ? friendlyCustomErrors[matchingName] : rawMessage.replace("execution reverted: ", "");
+  const matchingReason = Object.keys(friendlyRevertReasons).find((reason) => rawMessage.includes(reason));
+  return matchingReason
+    ? friendlyRevertReasons[matchingReason]
+    : rawMessage.replace("execution reverted: ", "").replace(/^"|"$/g, "");
 }

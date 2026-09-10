@@ -95,17 +95,16 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await contract.connect(shipper).registerUser("Alice Shipper", Role.Shipper);
 
       await expect(contract.connect(shipper).registerUser("Alice Again", Role.Shipper))
-        .to.be.revertedWithCustomError(contract, "AlreadyRegistered")
-        .withArgs(shipper.address);
+        .to.be.revertedWith("Wallet is already registered");
     });
 
     it("rejects invalid roles and display names", async function () {
       const { contract, shipper, carrier } = await loadFixture(deployFixture);
 
       await expect(contract.connect(shipper).registerUser("Alice Shipper", Role.None))
-        .to.be.revertedWithCustomError(contract, "InvalidRole");
+        .to.be.revertedWith("Role must be Shipper, Carrier, or Verifier");
       await expect(contract.connect(carrier).registerUser("Al", Role.Carrier))
-        .to.be.revertedWithCustomError(contract, "InvalidDisplayName");
+        .to.be.revertedWith("Display name must be 3 to 32 characters");
     });
   });
 
@@ -156,19 +155,15 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await contract.connect(verifier).registerUser("Vera Verifier", Role.Verifier);
 
       await expect(createAgreement(contract, stranger, carrier, verifier))
-        .to.be.revertedWithCustomError(contract, "NotRegistered")
-        .withArgs(stranger.address);
+        .to.be.revertedWith("Wallet is not registered");
 
       await contract.connect(shipper).registerUser("Alice Shipper", Role.Shipper);
       await expect(createAgreement(contract, shipper, stranger, verifier))
-        .to.be.revertedWithCustomError(contract, "InvalidCarrier")
-        .withArgs(stranger.address);
+        .to.be.revertedWith("Carrier must be registered as Carrier");
       await expect(createAgreement(contract, shipper, carrier, verifier, { verifier: stranger.address }))
-        .to.be.revertedWithCustomError(contract, "InvalidVerifier")
-        .withArgs(stranger.address);
+        .to.be.revertedWith("Verifier must be registered and different");
       await expect(createAgreement(contract, shipper, carrier, verifier, { verifier: carrier.address }))
-        .to.be.revertedWithCustomError(contract, "InvalidVerifier")
-        .withArgs(carrier.address);
+        .to.be.revertedWith("Verifier must be registered and different");
     });
 
     it("rejects self-assignment and invalid financial or deadline values", async function () {
@@ -176,15 +171,15 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await registerParties(contract, shipper, carrier, verifier);
 
       await expect(createAgreement(contract, shipper, carrier, verifier, { carrier: shipper.address }))
-        .to.be.revertedWithCustomError(contract, "SelfAssignment");
+        .to.be.revertedWith("Shipper and Carrier must be different");
       await expect(createAgreement(contract, shipper, carrier, verifier, { escrow: 0n }))
-        .to.be.revertedWithCustomError(contract, "InvalidEscrowAmount");
+        .to.be.revertedWith("Escrow amount must be greater than zero");
       await expect(createAgreement(contract, shipper, carrier, verifier, { deadline: await time.latest() }))
-        .to.be.revertedWithCustomError(contract, "InvalidDeadline");
+        .to.be.revertedWith("Deadline must be in the future");
       await expect(createAgreement(contract, shipper, carrier, verifier, { pickupBps: 0 }))
-        .to.be.revertedWithCustomError(contract, "InvalidPickupBps");
+        .to.be.revertedWith("Pickup percentage must be between 1 and 9999");
       await expect(createAgreement(contract, shipper, carrier, verifier, { pickupBps: 10_000 }))
-        .to.be.revertedWithCustomError(contract, "InvalidPickupBps");
+        .to.be.revertedWith("Pickup percentage must be between 1 and 9999");
     });
 
     it("rejects missing, duplicate, and invalid text data", async function () {
@@ -192,20 +187,19 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await registerParties(contract, shipper, carrier, verifier);
 
       await expect(createAgreement(contract, shipper, carrier, verifier, { pickupHash: ethers.ZeroHash }))
-        .to.be.revertedWithCustomError(contract, "InvalidProofHash");
+        .to.be.revertedWith("Proof hashes are required");
       await expect(createAgreement(contract, shipper, carrier, verifier, { deliveryHash: PICKUP_HASH }))
-        .to.be.revertedWithCustomError(contract, "DuplicateProofHash");
+        .to.be.revertedWith("Proof hashes must be different");
       await expect(createAgreement(contract, shipper, carrier, verifier, { cargo: "" }))
-        .to.be.revertedWithCustomError(contract, "InvalidTextLength");
+        .to.be.revertedWith("Text is required and must be within its limit");
       await expect(createAgreement(contract, shipper, carrier, verifier, { origin: "x".repeat(81) }))
-        .to.be.revertedWithCustomError(contract, "InvalidTextLength");
+        .to.be.revertedWith("Text is required and must be within its limit");
     });
 
     it("rejects unknown agreement IDs", async function () {
       const { contract } = await loadFixture(deployFixture);
       await expect(contract.getAgreement(1))
-        .to.be.revertedWithCustomError(contract, "AgreementNotFound")
-        .withArgs(1);
+        .to.be.revertedWith("Agreement does not exist");
     });
   });
 
@@ -216,8 +210,7 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await createAgreement(contract, shipper, carrier, verifier);
 
       await expect(contract.connect(stranger).acceptAgreement(1))
-        .to.be.revertedWithCustomError(contract, "Unauthorized")
-        .withArgs(stranger.address);
+        .to.be.revertedWith("Only the assigned Carrier can accept");
 
       await expect(contract.connect(carrier).acceptAgreement(1))
         .to.emit(contract, "AgreementAccepted");
@@ -238,21 +231,20 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       const { contract, shipper, carrier, verifier, stranger, deadline } = await loadFixture(acceptedAgreementFixture);
 
       await expect(contract.connect(stranger).fundAgreement(1, { value: ESCROW }))
-        .to.be.revertedWithCustomError(contract, "Unauthorized");
+        .to.be.revertedWith("Only the Shipper can fund this agreement");
       await expect(contract.connect(shipper).fundAgreement(1, { value: ESCROW - 1n }))
-        .to.be.revertedWithCustomError(contract, "IncorrectEscrowAmount")
-        .withArgs(ESCROW, ESCROW - 1n);
+        .to.be.revertedWith("Exact escrow amount is required");
 
       await contract.connect(shipper).fundAgreement(1, { value: ESCROW });
       await expect(contract.connect(shipper).fundAgreement(1, { value: ESCROW }))
-        .to.be.revertedWithCustomError(contract, "InvalidAgreementStatus");
+        .to.be.revertedWith("Agreement must be accepted before funding");
 
       const secondDeadline = await futureDeadline();
       await createAgreement(contract, shipper, carrier, verifier, { deadline: secondDeadline });
       await contract.connect(carrier).acceptAgreement(2);
       await time.increaseTo(secondDeadline + 1n);
       await expect(contract.connect(shipper).fundAgreement(2, { value: ESCROW }))
-        .to.be.revertedWithCustomError(contract, "DeadlinePassed");
+        .to.be.revertedWith("Agreement deadline has passed");
 
       expect(deadline).to.be.lessThan(secondDeadline);
     });
@@ -261,7 +253,7 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       const { contract, shipper } = await loadFixture(deployFixture);
 
       await expect(shipper.sendTransaction({ to: await contract.getAddress(), value: 1n }))
-        .to.be.revertedWithCustomError(contract, "DirectPaymentNotAllowed");
+        .to.be.revertedWith("Direct ETH transfers are not allowed");
     });
   });
 
@@ -272,22 +264,21 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await createAgreement(contract, shipper, carrier, verifier);
 
       await expect(contract.connect(stranger).cancelAgreement(1))
-        .to.be.revertedWithCustomError(contract, "Unauthorized");
+        .to.be.revertedWith("Only the Shipper can cancel this agreement");
       await expect(contract.connect(shipper).cancelAgreement(1))
         .to.emit(contract, "AgreementCancelled")
         .withArgs(1, shipper.address);
       expect((await contract.getAgreement(1)).status).to.equal(Status.Cancelled);
 
       await expect(contract.connect(shipper).cancelAgreement(1))
-        .to.be.revertedWithCustomError(contract, "InvalidAgreementStatus");
+        .to.be.revertedWith("Agreement cannot be cancelled now");
     });
 
     it("rejects cancellation after escrow is funded", async function () {
       const { contract, shipper } = await loadFixture(fundedAgreementFixture);
 
       await expect(contract.connect(shipper).cancelAgreement(1))
-        .to.be.revertedWithCustomError(contract, "InvalidAgreementStatus")
-        .withArgs(Status.Funded);
+        .to.be.revertedWith("Agreement cannot be cancelled now");
     });
 
     it("allows anyone to trigger an exact shipper refund after expiry", async function () {
@@ -311,13 +302,12 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       const { contract, stranger, deadline } = await loadFixture(fundedAgreementFixture);
 
       await expect(contract.connect(stranger).processExpiredAgreement(1))
-        .to.be.revertedWithCustomError(contract, "DeadlineNotPassed");
+        .to.be.revertedWith("Agreement deadline has not passed");
 
       await time.increaseTo(deadline + 1n);
       await contract.connect(stranger).processExpiredAgreement(1);
       await expect(contract.connect(stranger).processExpiredAgreement(1))
-        .to.be.revertedWithCustomError(contract, "InvalidAgreementStatus")
-        .withArgs(Status.Refunded);
+        .to.be.revertedWith("Agreement is not refundable");
     });
 
     it("rolls state back atomically when a shipper rejects the refund", async function () {
@@ -336,7 +326,7 @@ describe("ProofRouteEscrow: Member A shipper and escrow module", function () {
       await time.increaseTo(deadline + 1n);
 
       await expect(contract.connect(stranger).processExpiredAgreement(1))
-        .to.be.revertedWithCustomError(contract, "EtherTransferFailed");
+        .to.be.revertedWith("Ether transfer failed");
       expect((await contract.getAgreement(1)).status).to.equal(Status.Funded);
       expect(await ethers.provider.getBalance(await contract.getAddress())).to.equal(ESCROW);
     });

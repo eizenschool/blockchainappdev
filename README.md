@@ -11,6 +11,8 @@ The contract stores CIDs, not image files. IPFS provides content addressing and 
 - React 19 and Vite 8
 - MetaMask and local Hardhat chain ID 31337
 
+The Solidity source deliberately follows the classroom style: structs and mappings store records, `require` statements explain rejected actions, events form the audit trail, and inherited modules separate responsibilities. OpenZeppelin's `ReentrancyGuard` is retained only on the payout and refund functions because those functions send ETH to another address.
+
 See [AGENTS.md](AGENTS.md) for project constraints and [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md) for the lifecycle and module design.
 
 ## Install and quality checks

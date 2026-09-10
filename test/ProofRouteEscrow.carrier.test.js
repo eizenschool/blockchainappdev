@@ -148,30 +148,30 @@ describe("ProofRouteEscrow: carrier evidence and verifier settlement", function 
     it("rejects evidence from anyone except the designated carrier", async function () {
       const { contract, verifier, stranger } = await loadFixture(fundedAgreementFixture);
       await expect(contract.connect(verifier).submitMilestoneEvidence(1, Milestone.Pickup, PICKUP_CID))
-        .to.be.revertedWithCustomError(contract, "Unauthorized").withArgs(verifier.address);
+        .to.be.revertedWith("Only the assigned Carrier can submit evidence");
       await expect(contract.connect(stranger).submitMilestoneEvidence(1, Milestone.Pickup, PICKUP_CID))
-        .to.be.revertedWithCustomError(contract, "Unauthorized").withArgs(stranger.address);
+        .to.be.revertedWith("Only the assigned Carrier can submit evidence");
     });
 
     it("rejects empty and oversized evidence CIDs", async function () {
       const { contract, carrier } = await loadFixture(fundedAgreementFixture);
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, ""))
-        .to.be.revertedWithCustomError(contract, "InvalidEvidenceCid").withArgs(0, 128);
+        .to.be.revertedWith("Evidence CID must be 1 to 128 characters");
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, "x".repeat(129)))
-        .to.be.revertedWithCustomError(contract, "InvalidEvidenceCid").withArgs(129, 128);
+        .to.be.revertedWith("Evidence CID must be 1 to 128 characters");
     });
 
     it("rejects self-approval, unrelated verifiers, approval without evidence, and bad codes", async function () {
       const { contract, carrier, verifier, unrelatedVerifier } = await loadFixture(fundedAgreementFixture);
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Pickup, PICKUP_CODE))
-        .to.be.revertedWithCustomError(contract, "EvidenceNotSubmitted").withArgs(1, Milestone.Pickup);
+        .to.be.revertedWith("Evidence must be submitted before approval");
       await contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, PICKUP_CID);
       await expect(contract.connect(carrier).approveMilestone(1, Milestone.Pickup, PICKUP_CODE))
-        .to.be.revertedWithCustomError(contract, "Unauthorized").withArgs(carrier.address);
+        .to.be.revertedWith("Only the nominated Verifier can approve");
       await expect(contract.connect(unrelatedVerifier).approveMilestone(1, Milestone.Pickup, PICKUP_CODE))
-        .to.be.revertedWithCustomError(contract, "Unauthorized").withArgs(unrelatedVerifier.address);
+        .to.be.revertedWith("Only the nominated Verifier can approve");
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Pickup, "wrong-code"))
-        .to.be.revertedWithCustomError(contract, "InvalidMilestoneProof").withArgs(1, Milestone.Pickup);
+        .to.be.revertedWith("Proof code is incorrect");
       expect((await contract.getCarrierStats(carrier.address)).verifiedMilestones).to.equal(0n);
     });
 
@@ -180,22 +180,22 @@ describe("ProofRouteEscrow: carrier evidence and verifier settlement", function 
       await createAgreement(contract, shipper, carrier.address, verifier.address);
       await contract.connect(carrier).acceptAgreement(1);
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, PICKUP_CID))
-        .to.be.revertedWithCustomError(contract, "InvalidMilestoneOrder").withArgs(Milestone.Pickup, Status.Accepted);
+        .to.be.revertedWith("Pickup requires a funded agreement");
 
       await contract.connect(shipper).fundAgreement(1, { value: ESCROW });
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Delivery, DELIVERY_CID))
-        .to.be.revertedWithCustomError(contract, "InvalidMilestoneOrder").withArgs(Milestone.Delivery, Status.Funded);
+        .to.be.revertedWith("Delivery requires approved pickup");
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Delivery, DELIVERY_CODE))
-        .to.be.revertedWithCustomError(contract, "InvalidMilestoneOrder").withArgs(Milestone.Delivery, Status.Funded);
+        .to.be.revertedWith("Delivery requires approved pickup");
     });
 
     it("rejects repeated approval and post-approval evidence replacement", async function () {
       const { contract, carrier, verifier } = await loadFixture(fundedAgreementFixture);
       await submitAndApprovePickup(contract, carrier, verifier);
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Pickup, PICKUP_CODE))
-        .to.be.revertedWithCustomError(contract, "MilestoneAlreadyCompleted").withArgs(1, Milestone.Pickup);
+        .to.be.revertedWith("Milestone is already completed");
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, REPLACEMENT_CID))
-        .to.be.revertedWithCustomError(contract, "MilestoneAlreadyCompleted").withArgs(1, Milestone.Pickup);
+        .to.be.revertedWith("Milestone is already completed");
       expect((await contract.getCarrierStats(carrier.address)).verifiedMilestones).to.equal(1n);
     });
 
@@ -204,9 +204,9 @@ describe("ProofRouteEscrow: carrier evidence and verifier settlement", function 
       await contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, PICKUP_CID);
       await time.increaseTo(deadline + 1n);
       await expect(contract.connect(carrier).submitMilestoneEvidence(1, Milestone.Pickup, REPLACEMENT_CID))
-        .to.be.revertedWithCustomError(contract, "DeadlinePassed");
+        .to.be.revertedWith("Agreement deadline has passed");
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Pickup, PICKUP_CODE))
-        .to.be.revertedWithCustomError(contract, "DeadlinePassed");
+        .to.be.revertedWith("Agreement deadline has passed");
     });
 
     it("refunds only unreleased escrow and records a factual expiry", async function () {
@@ -241,7 +241,7 @@ describe("ProofRouteEscrow: carrier evidence and verifier settlement", function 
       const { contract, verifier, harness } = await loadFixture(harnessFixture);
       await harness.configureReceiver(true, false);
       await expect(contract.connect(verifier).approveMilestone(1, Milestone.Pickup, PICKUP_CODE))
-        .to.be.revertedWithCustomError(contract, "EtherTransferFailed");
+        .to.be.revertedWith("Ether transfer failed");
       expect((await contract.getAgreement(1)).status).to.equal(Status.Funded);
       expect((await contract.getAgreement(1)).releasedAmount).to.equal(0n);
       expect((await contract.getMilestone(1, Milestone.Pickup)).completed).to.equal(false);

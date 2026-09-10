@@ -54,33 +54,6 @@ abstract contract ProofRouteRegistry is ReentrancyGuard {
         uint256 expiredFundedAgreements;
     }
 
-    error AlreadyRegistered(address account);
-    error NotRegistered(address account);
-    error InvalidRole();
-    error InvalidDisplayName();
-    error InvalidTextLength(bytes32 field, uint256 suppliedLength, uint256 maximumLength);
-    error InvalidCarrier(address carrier);
-    error InvalidVerifier(address verifier);
-    error SelfAssignment();
-    error InvalidEscrowAmount();
-    error InvalidDeadline(uint256 suppliedDeadline, uint256 currentTimestamp);
-    error InvalidPickupBps(uint256 suppliedBps);
-    error InvalidProofHash();
-    error DuplicateProofHash();
-    error AgreementNotFound(uint256 agreementId);
-    error Unauthorized(address account);
-    error InvalidAgreementStatus(AgreementStatus currentStatus);
-    error DeadlinePassed(uint256 deadline, uint256 currentTimestamp);
-    error DeadlineNotPassed(uint256 deadline, uint256 currentTimestamp);
-    error IncorrectEscrowAmount(uint256 expected, uint256 received);
-    error InvalidMilestoneOrder(MilestoneType milestone, AgreementStatus currentStatus);
-    error InvalidMilestoneProof(uint256 agreementId, MilestoneType milestone);
-    error MilestoneAlreadyCompleted(uint256 agreementId, MilestoneType milestone);
-    error InvalidEvidenceCid(uint256 suppliedLength, uint256 maximumLength);
-    error EvidenceNotSubmitted(uint256 agreementId, MilestoneType milestone);
-    error EtherTransferFailed();
-    error DirectPaymentNotAllowed();
-
     event UserRegistered(address indexed account, string displayName, Role indexed role, uint64 registeredAt);
     event AgreementCreated(uint256 indexed agreementId, address indexed shipper, address indexed carrier, uint256 requiredEscrow, uint64 deadline, uint16 pickupBps);
     event AgreementVerifierAssigned(uint256 indexed agreementId, address indexed verifier);
@@ -94,22 +67,29 @@ abstract contract ProofRouteRegistry is ReentrancyGuard {
     event AgreementCompleted(uint256 indexed agreementId, uint64 completedAt);
 
     uint256 public agreementCount;
-    mapping(address account => User user) internal _users;
-    mapping(uint256 agreementId => Agreement agreement) internal _agreements;
-    mapping(uint256 agreementId => mapping(MilestoneType milestoneType => Milestone milestone)) internal _milestones;
-    mapping(address account => uint256[] agreementIds) internal _userAgreementIds;
-    mapping(address carrier => CarrierStats stats) internal _carrierStats;
+    // These mappings use the same key-to-value pattern introduced in the practicals.
+    mapping(address => User) internal _users;
+    mapping(uint256 => Agreement) internal _agreements;
+    mapping(uint256 => mapping(MilestoneType => Milestone)) internal _milestones;
+    mapping(address => uint256[]) internal _userAgreementIds;
+    mapping(address => CarrierStats) internal _carrierStats;
 
     modifier agreementExists(uint256 agreementId) {
-        if (agreementId == 0 || agreementId > agreementCount) revert AgreementNotFound(agreementId);
+        require(agreementId > 0 && agreementId <= agreementCount, "Agreement does not exist");
         _;
     }
 
     function registerUser(string calldata displayName, Role role) external {
-        if (_users[msg.sender].role != Role.None) revert AlreadyRegistered(msg.sender);
-        if (role != Role.Shipper && role != Role.Carrier && role != Role.Verifier) revert InvalidRole();
+        require(_users[msg.sender].role == Role.None, "Wallet is already registered");
+        require(
+            role == Role.Shipper || role == Role.Carrier || role == Role.Verifier,
+            "Role must be Shipper, Carrier, or Verifier"
+        );
         uint256 nameLength = bytes(displayName).length;
-        if (nameLength < 3 || nameLength > MAX_NAME_LENGTH) revert InvalidDisplayName();
+        require(
+            nameLength >= 3 && nameLength <= MAX_NAME_LENGTH,
+            "Display name must be 3 to 32 characters"
+        );
 
         uint64 registeredAt = uint64(block.timestamp);
         _users[msg.sender] = User(displayName, role, registeredAt);
@@ -128,18 +108,28 @@ abstract contract ProofRouteRegistry is ReentrancyGuard {
         bytes32 pickupProofHash,
         bytes32 deliveryProofHash
     ) external returns (uint256 agreementId) {
+        // The connected wallet is the user's identity, so each action checks its role.
         _requireRole(msg.sender, Role.Shipper);
-        if (carrier == msg.sender) revert SelfAssignment();
-        if (_users[carrier].role != Role.Carrier) revert InvalidCarrier(carrier);
-        if (verifier == msg.sender || verifier == carrier || _users[verifier].role != Role.Verifier) revert InvalidVerifier(verifier);
-        if (requiredEscrow == 0) revert InvalidEscrowAmount();
-        if (deadline <= block.timestamp) revert InvalidDeadline(deadline, block.timestamp);
-        if (pickupBps == 0 || pickupBps >= BPS_DENOMINATOR) revert InvalidPickupBps(pickupBps);
-        if (pickupProofHash == bytes32(0) || deliveryProofHash == bytes32(0)) revert InvalidProofHash();
-        if (pickupProofHash == deliveryProofHash) revert DuplicateProofHash();
-        _validateText("cargo", cargo, MAX_CARGO_LENGTH);
-        _validateText("origin", origin, MAX_LOCATION_LENGTH);
-        _validateText("destination", destination, MAX_LOCATION_LENGTH);
+        require(carrier != msg.sender, "Shipper and Carrier must be different");
+        require(_users[carrier].role == Role.Carrier, "Carrier must be registered as Carrier");
+        require(
+            verifier != msg.sender && verifier != carrier && _users[verifier].role == Role.Verifier,
+            "Verifier must be registered and different"
+        );
+        require(requiredEscrow > 0, "Escrow amount must be greater than zero");
+        require(deadline > block.timestamp, "Deadline must be in the future");
+        require(
+            pickupBps > 0 && pickupBps < BPS_DENOMINATOR,
+            "Pickup percentage must be between 1 and 9999"
+        );
+        require(
+            pickupProofHash != bytes32(0) && deliveryProofHash != bytes32(0),
+            "Proof hashes are required"
+        );
+        require(pickupProofHash != deliveryProofHash, "Proof hashes must be different");
+        _validateText(cargo, MAX_CARGO_LENGTH);
+        _validateText(origin, MAX_LOCATION_LENGTH);
+        _validateText(destination, MAX_LOCATION_LENGTH);
 
         agreementId = ++agreementCount;
         uint64 createdAt = uint64(block.timestamp);
@@ -155,10 +145,12 @@ abstract contract ProofRouteRegistry is ReentrancyGuard {
 
     function acceptAgreement(uint256 agreementId) external agreementExists(agreementId) {
         Agreement storage agreement = _agreements[agreementId];
-        if (msg.sender != agreement.carrier) revert Unauthorized(msg.sender);
+        require(msg.sender == agreement.carrier, "Only the assigned Carrier can accept");
         _requireRole(msg.sender, Role.Carrier);
-        if (agreement.status != AgreementStatus.Created) revert InvalidAgreementStatus(agreement.status);
-        if (block.timestamp > agreement.deadline) revert DeadlinePassed(agreement.deadline, block.timestamp);
+        require(agreement.status == AgreementStatus.Created, "Agreement must be in Created state");
+        require(block.timestamp <= agreement.deadline, "Agreement deadline has passed");
+
+        // Acceptance advances the agreement to its next permitted state.
         agreement.acceptedAt = uint64(block.timestamp);
         agreement.status = AgreementStatus.Accepted;
         emit AgreementAccepted(agreementId, msg.sender, agreement.acceptedAt);
@@ -171,23 +163,30 @@ abstract contract ProofRouteRegistry is ReentrancyGuard {
     function getCarrierStats(address carrier) external view returns (CarrierStats memory) { return _carrierStats[carrier]; }
 
     function _requireActionableMilestone(Agreement storage agreement, Milestone storage milestone, uint256 agreementId, MilestoneType milestoneType) internal view {
-        if (milestone.completed) revert MilestoneAlreadyCompleted(agreementId, milestoneType);
-        if (block.timestamp > agreement.deadline) revert DeadlinePassed(agreement.deadline, block.timestamp);
+        require(!milestone.completed, "Milestone is already completed");
+        require(block.timestamp <= agreement.deadline, "Agreement deadline has passed");
         if (milestoneType == MilestoneType.Pickup) {
-            if (agreement.status != AgreementStatus.Funded) revert InvalidMilestoneOrder(milestoneType, agreement.status);
-        } else if (agreement.status != AgreementStatus.PartiallyCompleted || !_milestones[agreementId][MilestoneType.Pickup].completed) {
-            revert InvalidMilestoneOrder(milestoneType, agreement.status);
+            require(agreement.status == AgreementStatus.Funded, "Pickup requires a funded agreement");
+        } else {
+            require(
+                agreement.status == AgreementStatus.PartiallyCompleted
+                    && _milestones[agreementId][MilestoneType.Pickup].completed,
+                "Delivery requires approved pickup"
+            );
         }
     }
 
     function _requireRole(address account, Role requiredRole) internal view {
         Role currentRole = _users[account].role;
-        if (currentRole == Role.None) revert NotRegistered(account);
-        if (currentRole != requiredRole) revert InvalidRole();
+        require(currentRole != Role.None, "Wallet is not registered");
+        require(currentRole == requiredRole, "Wallet has the wrong role");
     }
 
-    function _validateText(bytes32 field, string calldata value, uint256 maximumLength) internal pure {
+    function _validateText(string calldata value, uint256 maximumLength) internal pure {
         uint256 suppliedLength = bytes(value).length;
-        if (suppliedLength == 0 || suppliedLength > maximumLength) revert InvalidTextLength(field, suppliedLength, maximumLength);
+        require(
+            suppliedLength > 0 && suppliedLength <= maximumLength,
+            "Text is required and must be within its limit"
+        );
     }
 }

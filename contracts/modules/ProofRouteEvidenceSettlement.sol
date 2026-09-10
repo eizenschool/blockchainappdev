@@ -7,17 +7,19 @@ import {ProofRouteEscrowVault} from "./ProofRouteEscrowVault.sol";
 abstract contract ProofRouteEvidenceSettlement is ProofRouteEscrowVault {
     function submitMilestoneEvidence(uint256 agreementId, MilestoneType milestoneType, string calldata evidenceCid)
         external
-        nonReentrant
         agreementExists(agreementId)
     {
         Agreement storage agreement = _agreements[agreementId];
-        if (msg.sender != agreement.carrier) revert Unauthorized(msg.sender);
+        require(msg.sender == agreement.carrier, "Only the assigned Carrier can submit evidence");
         _requireRole(msg.sender, Role.Carrier);
         Milestone storage milestone = _milestones[agreementId][milestoneType];
         _requireActionableMilestone(agreement, milestone, agreementId, milestoneType);
 
         uint256 cidLength = bytes(evidenceCid).length;
-        if (cidLength == 0 || cidLength > MAX_EVIDENCE_CID_LENGTH) revert InvalidEvidenceCid(cidLength, MAX_EVIDENCE_CID_LENGTH);
+        require(
+            cidLength > 0 && cidLength <= MAX_EVIDENCE_CID_LENGTH,
+            "Evidence CID must be 1 to 128 characters"
+        );
         milestone.evidenceCid = evidenceCid;
         milestone.submittedAt = uint64(block.timestamp);
         emit MilestoneEvidenceSubmitted(agreementId, milestoneType, msg.sender, evidenceCid, milestone.submittedAt);
@@ -29,12 +31,17 @@ abstract contract ProofRouteEvidenceSettlement is ProofRouteEscrowVault {
         agreementExists(agreementId)
     {
         Agreement storage agreement = _agreements[agreementId];
-        if (msg.sender != agreement.verifier) revert Unauthorized(msg.sender);
+        require(msg.sender == agreement.verifier, "Only the nominated Verifier can approve");
         _requireRole(msg.sender, Role.Verifier);
         Milestone storage milestone = _milestones[agreementId][milestoneType];
         _requireActionableMilestone(agreement, milestone, agreementId, milestoneType);
-        if (milestone.submittedAt == 0 || bytes(milestone.evidenceCid).length == 0) revert EvidenceNotSubmitted(agreementId, milestoneType);
-        if (keccak256(bytes(proofCode)) != milestone.proofHash) revert InvalidMilestoneProof(agreementId, milestoneType);
+        require(
+            milestone.submittedAt > 0 && bytes(milestone.evidenceCid).length > 0,
+            "Evidence must be submitted before approval"
+        );
+
+        // Hash the supplied code and compare it with the hash saved at creation.
+        require(keccak256(bytes(proofCode)) == milestone.proofHash, "Proof code is incorrect");
 
         uint64 verifiedAt = uint64(block.timestamp);
         uint256 payoutAmount;
@@ -52,8 +59,10 @@ abstract contract ProofRouteEvidenceSettlement is ProofRouteEscrowVault {
         milestone.completedAt = verifiedAt;
         agreement.releasedAmount += payoutAmount;
         stats.verifiedMilestones += 1;
+
+        // State is updated before the external call, and nonReentrant prevents re-entry.
         (bool success, ) = payable(agreement.carrier).call{value: payoutAmount}("");
-        if (!success) revert EtherTransferFailed();
+        require(success, "Ether transfer failed");
 
         emit MilestoneVerified(agreementId, milestoneType, msg.sender, agreement.carrier, verifiedAt);
         emit EscrowReleased(agreementId, milestoneType, agreement.carrier, payoutAmount);

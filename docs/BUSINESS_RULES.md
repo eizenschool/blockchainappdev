@@ -54,6 +54,8 @@ There is no database, conventional backend, token, NFT, DAO, proxy, or external 
 
 ## Security and limitations
 
+- Validation uses the same `require(condition, "reason")` pattern as the practical exercises. Events, mappings, inheritance, payable functions and `.call` likewise extend concepts demonstrated in class.
+- OpenZeppelin `ReentrancyGuard` is the one additional payment safeguard. It is applied only when approving a milestone payout or processing an expiry refund; evidence submission does not transfer ETH and does not use the guard.
 - IPFS proves that retrieved bytes match a CID; it does not prove when, where, or truthfully why a photo was taken.
 - Evidence and transaction input are public. Proof codes become visible when a Verifier approves, so codes are single-use demonstration secrets.
 - The app never stores proof codes in local storage, source code, URLs, logs, or analytics.

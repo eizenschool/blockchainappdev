@@ -7,8 +7,11 @@ import {ProofRouteEvidenceSettlement} from "./ProofRouteEvidenceSettlement.sol";
 abstract contract ProofRouteExpiryReputation is ProofRouteEvidenceSettlement {
     function cancelAgreement(uint256 agreementId) external agreementExists(agreementId) {
         Agreement storage agreement = _agreements[agreementId];
-        if (msg.sender != agreement.shipper) revert Unauthorized(msg.sender);
-        if (agreement.status != AgreementStatus.Created && agreement.status != AgreementStatus.Accepted) revert InvalidAgreementStatus(agreement.status);
+        require(msg.sender == agreement.shipper, "Only the Shipper can cancel this agreement");
+        require(
+            agreement.status == AgreementStatus.Created || agreement.status == AgreementStatus.Accepted,
+            "Agreement cannot be cancelled now"
+        );
         agreement.status = AgreementStatus.Cancelled;
         emit AgreementCancelled(agreementId, msg.sender);
     }
@@ -16,14 +19,18 @@ abstract contract ProofRouteExpiryReputation is ProofRouteEvidenceSettlement {
     /// @notice Any wallet may call this after expiry; Solidity cannot invoke it on a timer.
     function processExpiredAgreement(uint256 agreementId) external nonReentrant agreementExists(agreementId) {
         Agreement storage agreement = _agreements[agreementId];
-        if (agreement.status != AgreementStatus.Funded && agreement.status != AgreementStatus.PartiallyCompleted) revert InvalidAgreementStatus(agreement.status);
-        if (block.timestamp <= agreement.deadline) revert DeadlineNotPassed(agreement.deadline, block.timestamp);
+        require(
+            agreement.status == AgreementStatus.Funded || agreement.status == AgreementStatus.PartiallyCompleted,
+            "Agreement is not refundable"
+        );
+        require(block.timestamp > agreement.deadline, "Agreement deadline has not passed");
 
         uint256 refundAmount = agreement.requiredEscrow - agreement.releasedAmount;
+        // Record the refund before sending ETH so the same agreement cannot refund twice.
         agreement.status = AgreementStatus.Refunded;
         _carrierStats[agreement.carrier].expiredFundedAgreements += 1;
         (bool success, ) = payable(agreement.shipper).call{value: refundAmount}("");
-        if (!success) revert EtherTransferFailed();
+        require(success, "Ether transfer failed");
         emit AgreementRefunded(agreementId, agreement.shipper, refundAmount);
     }
 }
