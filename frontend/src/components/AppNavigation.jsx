@@ -1,29 +1,23 @@
-const TABS = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "how-it-works", label: "How escrow works" },
-  { id: "roles-safety", label: "Roles & safety" },
-];
-
-export default function AppNavigation({ activeTab, onChange }) {
+export default function AppNavigation({ activeTab, onChange, tabs }) {
   const handleKeyDown = (event) => {
-    const currentIndex = TABS.findIndex(({ id }) => id === activeTab);
+    const currentIndex = tabs.findIndex(({ id }) => id === activeTab);
     let nextIndex = currentIndex;
 
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % TABS.length;
-    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
     if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = TABS.length - 1;
+    if (event.key === "End") nextIndex = tabs.length - 1;
     if (nextIndex === currentIndex) return;
 
     event.preventDefault();
-    onChange(TABS[nextIndex].id);
-    document.getElementById(`tab-${TABS[nextIndex].id}`)?.focus();
+    onChange(tabs[nextIndex].id);
+    document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus();
   };
 
   return (
     <nav className="primary-nav" aria-label="ProofRoute sections">
       <div className="tab-list" role="tablist" aria-label="Application views" onKeyDown={handleKeyDown}>
-        {TABS.map(({ id, label }) => (
+        {tabs.map(({ id, label }) => (
           <button
             id={`tab-${id}`}
             className={`nav-tab ${activeTab === id ? "active" : ""}`}

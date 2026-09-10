@@ -30,15 +30,10 @@ const ROLES = [
   },
 ];
 
-export function HowItWorks() {
+function EscrowGuide() {
   return (
-    <div className="education-view">
-      <header className="page-intro">
-        <p className="eyebrow">Escrow lifecycle</p>
-        <h1>Every payment follows a visible process</h1>
-        <p>ProofRoute releases test ETH only after the assigned wallets complete the required actions in order.</p>
-      </header>
-
+    <section className="guide-section" aria-labelledby="escrow-guide-title">
+      <div className="guide-section-heading"><p className="eyebrow">Escrow lifecycle</p><h2 id="escrow-guide-title">Every payment follows a visible process</h2></div>
       <ol className="lifecycle-grid">
         {LIFECYCLE.map(({ number, title, detail }) => (
           <li key={number}>
@@ -70,19 +65,14 @@ export function HowItWorks() {
         <strong>Demonstration environment</strong>
         <span>ProofRoute runs on the local Hardhat network with test ETH. No real funds or live hospital deliveries are involved.</span>
       </aside>
-    </div>
+    </section>
   );
 }
 
-export function RolesAndSafety() {
+function RolesGuide() {
   return (
-    <div className="education-view">
-      <header className="page-intro">
-        <p className="eyebrow">Permissions and safeguards</p>
-        <h1>Three wallets, clearly separated responsibilities</h1>
-        <p>The contract checks which wallet may perform each action and rejects unauthorized or out-of-order transactions.</p>
-      </header>
-
+    <section className="guide-section" aria-labelledby="roles-guide-title">
+      <div className="guide-section-heading"><p className="eyebrow">Permissions and safeguards</p><h2 id="roles-guide-title">Three wallets, clearly separated responsibilities</h2><p>The contract checks which wallet may perform each action and rejects unauthorized or out-of-order transactions.</p></div>
       <section className="role-grid" aria-label="ProofRoute roles">
         {ROLES.map(({ marker, title, subtitle, detail }) => (
           <article className="information-card role-card" key={title}>
@@ -107,6 +97,20 @@ export function RolesAndSafety() {
           <li><strong>Know the prototype boundary.</strong><span>Short OTPs are not production authentication. The prototype supports deadline refunds but does not arbitrate contested claims.</span></li>
         </ul>
       </section>
+    </section>
+  );
+}
+
+export function Guide() {
+  return (
+    <div className="education-view">
+      <header className="page-intro">
+        <p className="eyebrow">ProofRoute guide</p>
+        <h1>Understand the workflow before moving test ETH</h1>
+        <p>The lifecycle, wallet permissions, evidence rules, and prototype limitations are collected in one place.</p>
+      </header>
+      <EscrowGuide />
+      <RolesGuide />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { formatEther } from "ethers";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 const STATUS_LABELS = ["Created", "Accepted", "Funded", "Pickup verified", "Completed", "Refunded", "Cancelled"];
 const CID_PATTERN = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{20,})$/;
@@ -34,9 +34,7 @@ function gatewayUrl(cid) {
 }
 
 export default function CarrierDashboard({
-  user,
   agreements,
-  stats,
   chainTimestamp,
   busy,
   onRefresh,
@@ -47,14 +45,7 @@ export default function CarrierDashboard({
   const [evidenceCids, setEvidenceCids] = useState({});
   const [evidenceErrors, setEvidenceErrors] = useState({});
 
-  const summary = useMemo(
-    () => ({
-      total: agreements.length,
-      acceptance: agreements.filter(({ agreement }) => Number(agreement.status) === 0).length,
-      completed: agreements.filter(({ agreement }) => Number(agreement.status) === 4).length,
-    }),
-    [agreements],
-  );
+  const activeAgreements = agreements.filter(({ agreement }) => Number(agreement.status) <= 3);
 
   const submitEvidence = async (event, agreement, milestone) => {
     event.preventDefault();
@@ -74,30 +65,23 @@ export default function CarrierDashboard({
   };
 
   return (
-    <div className="dashboard carrier-dashboard">
+    <div className="dashboard carrier-dashboard action-view">
       <section className="dashboard-heading">
-        <div><p className="eyebrow">Carrier · Medical courier</p><h2>Welcome back, {user.displayName}</h2></div>
+        <div><p className="eyebrow">Carrier workspace</p><h1>Deliveries</h1><p>Accept assignments and submit milestone evidence requiring your attention.</p></div>
         <button className="button button-secondary" onClick={onRefresh}>Refresh blockchain data</button>
-      </section>
-
-      <section className="stats-grid stats-grid-four" aria-label="Carrier factual reputation">
-        <article><span>Assigned</span><strong>{summary.total}</strong></article>
-        <article><span>Milestones verified</span><strong>{stats.verifiedMilestones.toString()}</strong></article>
-        <article><span>Agreements completed</span><strong>{stats.completedAgreements.toString()}</strong></article>
-        <article><span>Funded expiries</span><strong>{stats.expiredFundedAgreements.toString()}</strong></article>
       </section>
 
       <section className="agreement-section">
         <div className="section-title">
           <div><p className="eyebrow">Assigned medical deliveries</p><h3>Medical courier workflow</h3></div>
-          <span className="count-pill">{agreements.length}</span>
+          <span className="count-pill">{activeAgreements.length}</span>
         </div>
 
-        {agreements.length === 0 ? (
-          <div className="panel empty-state small-empty"><h4>No assigned deliveries</h4><p>A hospital supply coordinator must create an agreement using this Carrier wallet address.</p></div>
+        {activeAgreements.length === 0 ? (
+          <div className="panel empty-state small-empty"><h4>No active deliveries</h4><p>New assignments requiring Carrier action will appear here. Closed records remain available under Agreements.</p></div>
         ) : (
           <div className="carrier-agreement-grid">
-            {agreements.map(({ agreement, pickup, delivery }) => {
+            {activeAgreements.map(({ agreement, pickup, delivery }) => {
               const status = Number(agreement.status);
               const expired = chainTimestamp > Number(agreement.deadline);
               const activeMilestone = status === 2 ? 0 : 1;

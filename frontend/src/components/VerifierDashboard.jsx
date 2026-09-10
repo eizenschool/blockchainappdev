@@ -1,5 +1,5 @@
 import { formatEther } from "ethers";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 const STATUS_LABELS = ["Created", "Accepted", "Funded", "Pickup verified", "Completed", "Refunded", "Cancelled"];
 
@@ -20,21 +20,21 @@ function gatewayUrl(cid) {
   return `https://ipfs.io/ipfs/${encodeURIComponent(cid)}`;
 }
 
-export default function VerifierDashboard({ user, agreements, chainTimestamp, busy, onRefresh, onApprove, onRefund }) {
+export default function VerifierDashboard({ agreements, chainTimestamp, busy, onRefresh, onApprove, onRefund }) {
   const [proofCodes, setProofCodes] = useState({});
   const [proofErrors, setProofErrors] = useState({});
 
-  const summary = useMemo(
-    () => ({
-      assigned: agreements.length,
-      pending: agreements.filter(({ agreement, pickup, delivery }) => {
-        const status = Number(agreement.status);
-        return (status === 2 && pickup.evidenceCid) || (status === 3 && delivery.evidenceCid);
-      }).length,
-      completed: agreements.filter(({ agreement }) => Number(agreement.status) === 4).length,
-    }),
-    [agreements],
-  );
+  const activeAgreements = agreements
+    .filter(({ agreement }) => Number(agreement.status) <= 3)
+    .sort((left, right) => {
+      const leftStatus = Number(left.agreement.status);
+      const rightStatus = Number(right.agreement.status);
+      const leftExpired = chainTimestamp > Number(left.agreement.deadline);
+      const rightExpired = chainTimestamp > Number(right.agreement.deadline);
+      const leftReady = !leftExpired && ((leftStatus === 2 && left.pickup.evidenceCid) || (leftStatus === 3 && left.delivery.evidenceCid));
+      const rightReady = !rightExpired && ((rightStatus === 2 && right.pickup.evidenceCid) || (rightStatus === 3 && right.delivery.evidenceCid));
+      return Number(rightReady) - Number(leftReady);
+    });
 
   const approve = async (event, agreement, milestone) => {
     event.preventDefault();
@@ -53,29 +53,23 @@ export default function VerifierDashboard({ user, agreements, chainTimestamp, bu
   };
 
   return (
-    <div className="dashboard verifier-dashboard">
+    <div className="dashboard verifier-dashboard action-view">
       <section className="dashboard-heading">
-        <div><p className="eyebrow">Verifier · Receiving inspector</p><h2>Welcome back, {user.displayName}</h2></div>
+        <div><p className="eyebrow">Verifier workspace</p><h1>Approvals</h1><p>Review submitted evidence and release only the milestone payout you have verified.</p></div>
         <button className="button button-secondary" onClick={onRefresh}>Refresh blockchain data</button>
-      </section>
-
-      <section className="stats-grid" aria-label="Verifier agreement summary">
-        <article><span>Assigned</span><strong>{summary.assigned}</strong></article>
-        <article><span>Evidence waiting</span><strong>{summary.pending}</strong></article>
-        <article><span>Completed</span><strong>{summary.completed}</strong></article>
       </section>
 
       <section className="agreement-section">
         <div className="section-title">
           <div><p className="eyebrow">Hospital delivery checks</p><h3>Evidence approval queue</h3></div>
-          <span className="count-pill">{agreements.length}</span>
+          <span className="count-pill">{activeAgreements.length}</span>
         </div>
 
-        {agreements.length === 0 ? (
-          <div className="panel empty-state small-empty"><h4>No assigned deliveries</h4><p>A hospital supply coordinator must nominate this Verifier wallet when creating an agreement.</p></div>
+        {activeAgreements.length === 0 ? (
+          <div className="panel empty-state small-empty"><h4>No active approvals</h4><p>Deliveries awaiting evidence or verification will appear here. Closed records remain available under Agreements.</p></div>
         ) : (
           <div className="carrier-agreement-grid">
-            {agreements.map(({ agreement, pickup, delivery }) => {
+            {activeAgreements.map(({ agreement, pickup, delivery }) => {
               const status = Number(agreement.status);
               const expired = chainTimestamp > Number(agreement.deadline);
               const activeMilestone = status === 2 ? 0 : 1;

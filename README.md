@@ -47,12 +47,12 @@ Redeploy whenever the contract changes or the local node restarts. Deployment re
 
 1. Import three local Hardhat accounts into MetaMask.
 2. Register account 1 as Shipper, account 2 as Carrier, and account 3 as Verifier.
-3. In the Shipper dashboard, choose Malaysian origin and destination regions, then generate the two six-digit demonstration proof codes. Copy and record both codes outside the app before creating the agreement; the interface clears them after confirmation and deliberately does not save them.
-4. Switch to the Carrier, accept the agreement, then switch back to the Shipper and fund the exact test-ETH amount.
-5. Upload a non-sensitive pickup photo to an external IPFS service and paste its CID in the Carrier dashboard. There is no Pinata token or built-in upload feature.
-6. Switch to the nominated Verifier, open the gateway link, review the evidence, and enter the pickup code. Approval releases only the pickup allocation.
+3. Open the Shipper's **Create** tab, choose Malaysian origin and destination regions, then generate the two six-digit demonstration proof codes. Copy and record both codes outside the app before creating the agreement; the interface clears them after confirmation and deliberately does not save them.
+4. Switch to the Carrier and use **Deliveries** to accept the agreement. Switch back to the Shipper, open **Agreements**, view the new record, and fund the exact test-ETH amount from its details drawer.
+5. Upload a non-sensitive pickup photo to an external IPFS service and paste its CID in the Carrier's **Deliveries** tab. There is no Pinata token or built-in upload feature.
+6. Switch to the nominated Verifier, open **Approvals**, follow the gateway link, review the evidence, and enter the pickup code. Approval releases only the pickup allocation.
 7. Repeat evidence submission and Verifier approval for delivery. The remaining escrow, including rounding remainder, is released and the agreement becomes Completed.
-8. Review the chronological on-chain event history and the Carrier's raw milestone, completion, and funded-expiry counts.
+8. Open **Agreements**, select the completed record, and review its chronological on-chain history. Carrier reputation counts remain on the **Overview** tab.
 
 Evidence and submitted proof codes become public blockchain data. Do not upload faces, patient records, addresses, or other private information. Use dummy medical-supply photos for the demonstration.
 
@@ -68,6 +68,7 @@ The generated six-digit proof codes are convenient for a classroom demonstration
 - `module/03-evidence-settlement`: evidence, Verifier approval and payouts
 - `module/04-expiry-reputation`: cancellation, refunds and factual counters
 - `module/05-frontend-history`: complete modular integration, interface, history, deployment data and documentation
+- `feature/role-navigation`: role-aware tabs, compact agreement records and per-agreement history drawer
 
 `main` remains unchanged. The Verifier ABI should be merged into `dev` only after the team or tutor accepts the scope change and the manual MetaMask demonstration passes.
 

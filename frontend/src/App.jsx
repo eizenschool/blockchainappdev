@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatEther, getAddress, id, isAddress, parseEther } from "ethers";
+import { getAddress, id, isAddress, parseEther } from "ethers";
 import AppNavigation from "./components/AppNavigation.jsx";
+import AgreementDetailsDrawer from "./components/AgreementDetailsDrawer.jsx";
+import AgreementTable from "./components/AgreementTable.jsx";
 import CarrierDashboard from "./components/CarrierDashboard.jsx";
-import { HowItWorks, RolesAndSafety } from "./components/EducationViews.jsx";
-import EventHistory from "./components/EventHistory.jsx";
+import { Guide } from "./components/EducationViews.jsx";
+import OverviewDashboard from "./components/OverviewDashboard.jsx";
 import VerifierDashboard from "./components/VerifierDashboard.jsx";
 import { MALAYSIA_LOCATIONS, generateProofCodes } from "./lib/agreementForm.js";
 import { loadAgreementHistory } from "./lib/history.js";
@@ -28,15 +30,31 @@ const SUPPLY_CATEGORIES = [
   "Diagnostic test kits",
   "Medical oxygen supplies",
 ];
-const STATUS_LABELS = [
-  "Created",
-  "Accepted",
-  "Funded",
-  "Pickup verified",
-  "Completed",
-  "Refunded",
-  "Cancelled",
+const PUBLIC_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "guide", label: "Guide" },
 ];
+
+const ROLE_TABS = {
+  [ROLES.SHIPPER]: [
+    { id: "overview", label: "Overview" },
+    { id: "create", label: "Create" },
+    { id: "agreements", label: "Agreements" },
+    { id: "guide", label: "Guide" },
+  ],
+  [ROLES.CARRIER]: [
+    { id: "overview", label: "Overview" },
+    { id: "deliveries", label: "Deliveries" },
+    { id: "agreements", label: "Agreements" },
+    { id: "guide", label: "Guide" },
+  ],
+  [ROLES.VERIFIER]: [
+    { id: "overview", label: "Overview" },
+    { id: "approvals", label: "Approvals" },
+    { id: "agreements", label: "Agreements" },
+    { id: "guide", label: "Guide" },
+  ],
+};
 
 const emptyAgreementForm = () => ({
   carrier: "",
@@ -55,13 +73,6 @@ function shortAddress(address) {
   return address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Not connected";
 }
 
-function formatDate(timestamp) {
-  return new Intl.DateTimeFormat("en-MY", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(Number(timestamp) * 1000));
-}
-
 function MalaysiaLocationOptions({ placeholder }) {
   return (
     <>
@@ -77,7 +88,7 @@ function MalaysiaLocationOptions({ placeholder }) {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("overview");
   const [account, setAccount] = useState("");
   const [chainId, setChainId] = useState(null);
   const [contract, setContract] = useState(null);
@@ -95,11 +106,29 @@ function App() {
   const [proofCodeFeedback, setProofCodeFeedback] = useState(null);
   const [registration, setRegistration] = useState({ displayName: "", role: ROLES.SHIPPER });
   const [agreementForm, setAgreementForm] = useState(emptyAgreementForm);
+  const [agreementFilter, setAgreementFilter] = useState("current");
+  const [visibleAgreementCount, setVisibleAgreementCount] = useState(10);
+  const [selectedAgreementId, setSelectedAgreementId] = useState(null);
+  const [drawerReturnFocus, setDrawerReturnFocus] = useState(null);
+  const closeAgreementDrawer = useCallback(() => setSelectedAgreementId(null), []);
 
   const walletInstalled = hasWallet();
   const deploymentReady = hasDeployment();
   const correctNetwork = chainId === LOCAL_CHAIN_ID;
   const role = Number(user?.role ?? 0);
+  const navigationTabs = ROLE_TABS[role] ?? PUBLIC_TABS;
+
+  useEffect(() => {
+    if (!navigationTabs.some(({ id: tabId }) => tabId === activeTab)) {
+      setActiveTab("overview");
+    }
+    setSelectedAgreementId(null);
+  }, [account, activeTab, navigationTabs]);
+
+  useEffect(() => {
+    setAgreementFilter("current");
+    setVisibleAgreementCount(10);
+  }, [account]);
 
   const loadContractData = useCallback(async (activeContract, activeAccount) => {
     const latestBlock = await activeContract.runner.provider.getBlock("latest");
@@ -354,19 +383,15 @@ function App() {
       `Unreleased escrow for agreement #${agreement.id} was refunded.`,
     );
 
-  const summary = useMemo(
-    () => ({
-      total: agreements.length,
-      awaiting: agreements.filter(({ agreement }) => Number(agreement.status) < 2).length,
-      funded: agreements.filter(({ agreement }) => [2, 3].includes(Number(agreement.status))).length,
-    }),
-    [agreements],
+  const selectedAgreement = useMemo(
+    () => agreements.find(({ agreement }) => agreement.id.toString() === selectedAgreementId) ?? null,
+    [agreements, selectedAgreementId],
   );
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="ProofRoute home" onClick={() => setActiveTab("dashboard")}>
+        <a className="brand" href="#top" aria-label="ProofRoute home" onClick={() => setActiveTab("overview")}>
           <span className="brand-mark" aria-hidden="true">PR</span>
           <span>ProofRoute</span>
         </a>
@@ -381,15 +406,16 @@ function App() {
         </div>
       </header>
 
-      <AppNavigation activeTab={activeTab} onChange={setActiveTab} />
+      <AppNavigation activeTab={activeTab} onChange={setActiveTab} tabs={navigationTabs} />
 
       <main id="top">
+        {notice && activeTab !== "overview" && <div className={`notice notice-${notice.type} global-notice`} role="status">{notice.text}</div>}
         <section
-          id="panel-dashboard"
+          id="panel-overview"
           className="tab-panel"
           role="tabpanel"
-          aria-labelledby="tab-dashboard"
-          hidden={activeTab !== "dashboard"}
+          aria-labelledby="tab-overview"
+          hidden={activeTab !== "overview"}
         >
           <header className="page-intro dashboard-intro">
             <div>
@@ -464,11 +490,23 @@ function App() {
           </section>
         )}
 
-        {contract && role === ROLES.CARRIER && (
-          <CarrierDashboard
+        {contract && user && role !== ROLES.NONE && (
+          <OverviewDashboard
             user={user}
+            role={role}
             agreements={agreements}
-            stats={carrierStats}
+            carrierStats={carrierStats}
+            chainTimestamp={chainTimestamp}
+            onRefresh={() => loadContractData(contract, account)}
+            onNavigate={setActiveTab}
+          />
+        )}
+        </section>
+
+        {contract && role === ROLES.CARRIER && (
+          <section id="panel-deliveries" className="tab-panel" role="tabpanel" aria-labelledby="tab-deliveries" hidden={activeTab !== "deliveries"}>
+          <CarrierDashboard
+            agreements={agreements}
             chainTimestamp={chainTimestamp}
             busy={busy}
             onRefresh={() => loadContractData(contract, account)}
@@ -476,11 +514,12 @@ function App() {
             onSubmitEvidence={submitMilestoneEvidence}
             onRefund={refundAgreement}
           />
+          </section>
         )}
 
         {contract && role === ROLES.VERIFIER && (
+          <section id="panel-approvals" className="tab-panel" role="tabpanel" aria-labelledby="tab-approvals" hidden={activeTab !== "approvals"}>
           <VerifierDashboard
-            user={user}
             agreements={agreements}
             chainTimestamp={chainTimestamp}
             busy={busy}
@@ -488,27 +527,18 @@ function App() {
             onApprove={approveMilestone}
             onRefund={refundAgreement}
           />
+          </section>
         )}
 
         {contract && role === ROLES.SHIPPER && (
-          <div className="dashboard">
-            <section className="dashboard-heading">
-              <div>
-                <p className="eyebrow">Shipper · Hospital supply coordinator</p>
-                <h2>Welcome back, {user.displayName}</h2>
-              </div>
-              <button className="button button-secondary" onClick={() => loadContractData(contract, account)}>
-                Refresh blockchain data
-              </button>
-            </section>
-
-            <section className="stats-grid" aria-label="Agreement summary">
-              <article><span>Total agreements</span><strong>{summary.total}</strong></article>
-              <article><span>Awaiting funding</span><strong>{summary.awaiting}</strong></article>
-              <article><span>Escrow active</span><strong>{summary.funded}</strong></article>
-            </section>
-
-            <section className="content-grid">
+          <section id="panel-create" className="tab-panel" role="tabpanel" aria-labelledby="tab-create" hidden={activeTab !== "create"}>
+          <div className="dashboard create-page">
+            <header className="action-page-heading">
+              <p className="eyebrow">Shipper workspace</p>
+              <h1>Create agreement</h1>
+              <p>Define the route, participants, escrow, deadline, payout split, and demonstration proof codes.</p>
+            </header>
+            <section className="create-tab-layout">
               <article className="panel create-panel">
                 <div className="section-title">
                   <div><p className="eyebrow">New medical delivery</p><h3>Create a supply agreement</h3></div>
@@ -590,94 +620,54 @@ function App() {
                 </form>
               </article>
 
-              <section className="agreement-section">
-                <div className="section-title">
-                  <div><p className="eyebrow">On-chain records</p><h3>Your agreements</h3></div>
-                  <span className="count-pill">{agreements.length}</span>
-                </div>
-                {agreements.length === 0 ? (
-                  <div className="panel empty-state small-empty"><h4>No agreements yet</h4><p>Create your first hospital supply agreement using the form.</p></div>
-                ) : (
-                  <div className="agreement-list">
-                    {agreements.map(({ agreement, pickup, delivery }) => {
-                      const status = Number(agreement.status);
-                      const expired = chainTimestamp > Number(agreement.deadline);
-                      return (
-                        <article className="agreement-card" key={agreement.id.toString()}>
-                          <div className="agreement-card-head">
-                            <div><span className="agreement-id">Agreement #{agreement.id.toString()}</span><h4>{agreement.cargo}</h4></div>
-                            <span className={`status status-${status}`}>{STATUS_LABELS[status]}</span>
-                          </div>
-                          <div className="route"><span>{agreement.origin}</span><i>→</i><span>{agreement.destination}</span></div>
-                          <dl className="agreement-details">
-                            <div><dt>Carrier</dt><dd title={agreement.carrier}>{shortAddress(agreement.carrier)}</dd></div>
-                            <div><dt>Verifier</dt><dd title={agreement.verifier}>{shortAddress(agreement.verifier)}</dd></div>
-                            <div><dt>Escrow</dt><dd>{formatEther(agreement.requiredEscrow)} ETH</dd></div>
-                            <div><dt>Released</dt><dd>{formatEther(agreement.releasedAmount)} ETH</dd></div>
-                            <div><dt>Deadline</dt><dd>{formatDate(agreement.deadline)}</dd></div>
-                            <div><dt>Split</dt><dd>{Number(pickup.payoutBps) / 100}% / {Number(delivery.payoutBps) / 100}%</dd></div>
-                          </dl>
-                          <div className="milestone-progress" aria-label="Milestone progress">
-                            <span className={status >= 1 && status <= 5 ? "complete" : ""}>Accepted</span>
-                            <i>→</i>
-                            <span className={status >= 2 && status <= 5 ? "complete" : ""}>Funded</span>
-                            <i>→</i>
-                            <span className={pickup.completed ? "complete" : ""}>Pickup</span>
-                            <i>→</i>
-                            <span className={delivery.completed ? "complete" : ""}>Delivery</span>
-                          </div>
-                          <div className="card-actions">
-                            {status === 0 && <span className="action-hint">Waiting for carrier acceptance</span>}
-                            {status === 1 && !expired && (
-                              <button className="button button-primary button-small" disabled={busy === `fund-${agreement.id}`} onClick={() => fundAgreement(agreement)}>
-                                {busy === `fund-${agreement.id}` ? "Funding…" : "Fund exact escrow"}
-                              </button>
-                            )}
-                            {[0, 1].includes(status) && (
-                              <button className="button button-danger button-small" disabled={busy === `cancel-${agreement.id}`} onClick={() => cancelAgreement(agreement)}>
-                                Cancel
-                              </button>
-                            )}
-                            {[2, 3].includes(status) && !expired && <span className="action-hint">Escrow locked until Verifier approval or expiry</span>}
-                            {[2, 3].includes(status) && expired && (
-                              <button className="button button-primary button-small" disabled={busy === `refund-${agreement.id}`} onClick={() => refundAgreement(agreement)}>
-                                {busy === `refund-${agreement.id}` ? "Refunding…" : "Process expired refund"}
-                              </button>
-                            )}
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
             </section>
           </div>
+          </section>
         )}
 
-          {contract && role !== ROLES.NONE && <EventHistory entries={history} />}
+        <section
+          id="panel-agreements"
+          className="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-agreements"
+          hidden={activeTab !== "agreements"}
+        >
+          {contract && role !== ROLES.NONE && (
+            <AgreementTable
+              agreements={agreements}
+              filter={agreementFilter}
+              visibleCount={visibleAgreementCount}
+              onFilterChange={(nextFilter) => { setAgreementFilter(nextFilter); setVisibleAgreementCount(10); }}
+              onLoadMore={() => setVisibleAgreementCount((current) => current + 10)}
+              onView={(record, trigger) => { setSelectedAgreementId(record.agreement.id.toString()); setDrawerReturnFocus(trigger); }}
+            />
+          )}
         </section>
 
         <section
-          id="panel-how-it-works"
+          id="panel-guide"
           className="tab-panel"
           role="tabpanel"
-          aria-labelledby="tab-how-it-works"
-          hidden={activeTab !== "how-it-works"}
+          aria-labelledby="tab-guide"
+          hidden={activeTab !== "guide"}
         >
-          <HowItWorks />
-        </section>
-
-        <section
-          id="panel-roles-safety"
-          className="tab-panel"
-          role="tabpanel"
-          aria-labelledby="tab-roles-safety"
-          hidden={activeTab !== "roles-safety"}
-        >
-          <RolesAndSafety />
+          <Guide />
         </section>
       </main>
+
+      <AgreementDetailsDrawer
+        record={selectedAgreement}
+        history={history}
+        role={role}
+        chainTimestamp={chainTimestamp}
+        busy={busy}
+        notice={notice}
+        returnFocus={drawerReturnFocus}
+        onClose={closeAgreementDrawer}
+        onFund={fundAgreement}
+        onCancel={cancelAgreement}
+        onRefund={refundAgreement}
+      />
 
       <footer>
         <span>ProofRoute · BMIS2003</span>
