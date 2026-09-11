@@ -13,3 +13,7 @@ frontend/dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Keep assignment submission artifacts outside the source repository.
+docs/*.docx
+docs/appendices/

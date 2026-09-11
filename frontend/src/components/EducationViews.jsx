@@ -61,10 +61,6 @@ function EscrowGuide() {
         </article>
       </section>
 
-      <aside className="testnet-banner">
-        <strong>Demonstration environment</strong>
-        <span>ProofRoute runs on the local Hardhat network with test ETH. No real funds or live hospital deliveries are involved.</span>
-      </aside>
     </section>
   );
 }

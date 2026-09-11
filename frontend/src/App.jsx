@@ -423,11 +423,6 @@ function App() {
               <h1>Verified delivery. Controlled payment.</h1>
               <p>Coordinate medical-supply deliveries, protect test ETH in escrow, and record every handoff on-chain.</p>
             </div>
-            <div className="network-card" aria-label="Development network information">
-              <span className="network-card-label">Environment</span>
-              <strong>Hardhat Local</strong>
-              <small>Chain ID 31337 · Test ETH only</small>
-            </div>
           </header>
 
         {!walletInstalled && (
