@@ -96,6 +96,7 @@ h1 span { color: var(--forest); }
 .dashboard-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; }
 .dashboard-heading h2 { margin-bottom: 0; font-size: 34px; letter-spacing: -.025em; }
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.stats-grid-four { grid-template-columns: repeat(4, 1fr); }
 .stats-grid article { padding: 20px 22px; display: flex; justify-content: space-between; align-items: center; background: #e7ece6; border-radius: 16px; color: var(--muted); font-weight: 600; }
 .stats-grid strong { color: var(--forest); font: 800 28px "Manrope", sans-serif; }
 .content-grid { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 22px; align-items: start; }
@@ -126,8 +127,41 @@ h1 span { color: var(--forest); }
 .agreement-details div { display: grid; gap: 2px; }
 .agreement-details dt { color: var(--muted); font-size: 11px; }
 .agreement-details dd { margin: 0; font-size: 13px; font-weight: 700; }
+.milestone-progress { margin-top: 17px; display: flex; align-items: center; gap: 7px; color: #98a19b; font-size: 11px; font-weight: 800; }
+.milestone-progress span { flex: 1; padding: 7px 8px; text-align: center; background: #eff2ef; border-radius: 8px; }
+.milestone-progress span.complete { color: #185e3d; background: #ddf3e7; }
+.milestone-progress i { color: #a8b0aa; font-style: normal; }
 .card-actions { margin-top: 18px; padding-top: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 9px; border-top: 1px solid #e8ece8; }
 .action-hint { margin-right: auto; color: var(--muted); font-size: 12px; }
+
+.carrier-dashboard { margin-bottom: 22px; }
+.carrier-agreement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.carrier-card { display: flex; flex-direction: column; }
+.carrier-actions { margin-top: auto; padding-top: 18px; }
+.proof-form { width: 100%; display: grid; gap: 12px; }
+.proof-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.proof-heading > div { display: grid; gap: 3px; }
+.proof-heading strong { color: var(--ink); font: 800 17px "Manrope", sans-serif; }
+.proof-heading span:not(.step-pill) { color: var(--forest); font-size: 12px; font-weight: 800; }
+.proof-form label { display: grid; gap: 7px; color: #3b463f; font-size: 13px; font-weight: 700; }
+.proof-form input { width: 100%; min-height: 46px; padding: 10px 12px; color: var(--ink); background: #f8faf7; border: 1px solid #d6ddd6; border-radius: 10px; outline: none; }
+.proof-form input:focus { border-color: #4b8c74; box-shadow: 0 0 0 3px rgba(75,140,116,.12); }
+.proof-disclosure { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.proof-error { margin: 0; color: var(--danger); font-size: 12px; font-weight: 700; }
+
+.history-panel { margin-top: 22px; padding: 28px; }
+.history-panel .section-title { margin-bottom: 8px; }
+.history-empty { margin: 22px 0 0; color: var(--muted); }
+.history-list { margin: 0; padding: 10px 0 0; list-style: none; }
+.history-list li { position: relative; display: grid; grid-template-columns: 16px 1fr; gap: 14px; padding: 16px 0; }
+.history-list li:not(:last-child)::after { content: ""; position: absolute; top: 29px; bottom: -17px; left: 5px; width: 2px; background: #e2e8e2; }
+.history-marker { position: relative; z-index: 1; width: 12px; height: 12px; margin-top: 4px; border: 3px solid #b8dfcc; border-radius: 50%; background: var(--forest); }
+.history-copy { min-width: 0; }
+.history-copy > div { display: flex; justify-content: space-between; gap: 20px; }
+.history-copy strong { color: var(--ink); }
+.history-copy > div span { color: var(--forest); font-size: 12px; font-weight: 800; }
+.history-copy p { margin: 5px 0 7px; color: var(--muted); font-size: 13px; }
+.history-copy small { color: #7f8982; }
 
 code { padding: 2px 5px; border-radius: 5px; background: #e9eee9; }
 footer { padding: 26px clamp(20px, 5vw, 76px); display: flex; justify-content: space-between; gap: 20px; color: #78817b; border-top: 1px solid var(--line); font-size: 12px; }
@@ -138,6 +172,7 @@ footer { padding: 26px clamp(20px, 5vw, 76px); display: flex; justify-content: s
   .registration-panel, .content-grid { grid-template-columns: 1fr; }
   .compact-form { grid-template-columns: 1fr; }
   .create-panel { position: static; }
+  .stats-grid-four, .carrier-agreement-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 620px) {
@@ -148,11 +183,16 @@ footer { padding: 26px clamp(20px, 5vw, 76px); display: flex; justify-content: s
   .hero-flow { display: none; }
   .dashboard-heading { align-items: stretch; flex-direction: column; }
   .stats-grid { grid-template-columns: 1fr; }
+  .stats-grid-four, .carrier-agreement-grid { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .field-full { grid-column: auto; }
   .registration-panel, .create-panel, .empty-state { padding: 24px; }
   .agreement-details { grid-template-columns: 1fr; }
   .card-actions { align-items: stretch; flex-direction: column; }
   .action-hint { margin-right: 0; }
+  .milestone-progress { display: grid; grid-template-columns: 1fr; }
+  .milestone-progress i { display: none; }
+  .history-panel { padding: 22px; }
+  .history-copy > div { flex-direction: column; gap: 3px; }
   footer { flex-direction: column; }
 }

@@ -1,6 +1,6 @@
 # ProofRoute Business Rules and Architecture
 
-## Member A rules
+## Complete lifecycle rules
 
 1. A wallet registers once as either Shipper or Carrier. The wallet address is its identity.
 2. Only a Shipper creates an agreement, and the nominated Carrier must already be registered.
@@ -12,6 +12,13 @@
 8. After expiry, any wallet may trigger processing, but the unreleased balance always returns to the Shipper.
 9. Direct Ether transfers are rejected. Every wei held by the contract must belong to a funded agreement.
 10. Refund state changes happen before the external Ether transfer and the entry point is reentrancy-protected.
+11. Only the nominated Carrier may submit a milestone proof, and only before the agreement deadline.
+12. A submitted plaintext code is hashed on-chain and must match the stored milestone hash.
+13. Pickup must be verified before delivery, and neither milestone may be submitted more than once.
+14. Pickup releases `required escrow × pickup basis points ÷ 10,000` and moves the agreement to `PartiallyCompleted`.
+15. Delivery releases all unreleased escrow, including any integer-division remainder, and moves the agreement to `Completed`.
+16. Milestone state changes happen before the Carrier transfer. A failed transfer reverts the complete transaction, and reentrant payout attempts are blocked.
+17. Verification, payout, completion, cancellation, and refund events form the audit trail shown by the interface.
 
 ## Lifecycle
 
@@ -22,8 +29,8 @@ stateDiagram-v2
     Created --> Cancelled: Shipper cancels
     Accepted --> Cancelled: Shipper cancels before funding
     Accepted --> Funded: Shipper deposits exact test ETH
-    Funded --> PartiallyCompleted: Pickup proof (Member B)
-    PartiallyCompleted --> Completed: Delivery proof (Member B)
+    Funded --> PartiallyCompleted: Carrier verifies pickup
+    PartiallyCompleted --> Completed: Carrier verifies delivery
     Funded --> Refunded: Deadline passes, refund triggered
     PartiallyCompleted --> Refunded: Deadline passes, remainder refunded
     Cancelled --> [*]
@@ -51,4 +58,6 @@ There is no database or conventional backend. The deployed contract is the share
 - Solidity cannot schedule its own refund call; a person or automation service must submit the transaction after expiry.
 - The assignment simulates scanner/oracle data with one-time proof codes.
 - A proof code becomes visible in transaction input when Member B submits it, so it cannot be reused.
+- Proof codes simulate a trusted scanner or logistics oracle; the contract does not independently observe physical cargo.
+- The event history performs direct log queries suitable for the assignment's local chain, not a high-volume production indexer.
 - Local Hardhat test accounts and test ETH have no real-world value.
