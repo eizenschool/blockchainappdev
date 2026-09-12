@@ -74,9 +74,11 @@ export async function loadAgreementHistory(contract, agreementIds) {
     .filter((log) => log.args?.agreementId && ownedIds.has(log.args.agreementId.toString()));
 
   const provider = contract.runner.provider;
-  const blockNumbers = [...new Set(logs.map((log) => log.blockNumber))];
-  const blocks = await Promise.all(blockNumbers.map((blockNumber) => provider.getBlock(blockNumber)));
-  const timestamps = new Map(blocks.map((block) => [block.number, block.timestamp]));
+  // A restarted local chain can reuse block numbers. Reading by hash prevents a
+  // browser provider from returning a cached block from the previous demo run.
+  const blockHashes = [...new Set(logs.map((log) => log.blockHash))];
+  const blocks = await Promise.all(blockHashes.map((blockHash) => provider.getBlock(blockHash)));
+  const timestamps = new Map(blocks.map((block) => [block.hash, block.timestamp]));
 
   return logs
     .sort((left, right) => left.blockNumber - right.blockNumber || left.index - right.index)
@@ -84,7 +86,7 @@ export async function loadAgreementHistory(contract, agreementIds) {
       key: `${log.transactionHash}-${log.index}`,
       agreementId: log.args.agreementId.toString(),
       transactionHash: log.transactionHash,
-      timestamp: timestamps.get(log.blockNumber),
+      timestamp: timestamps.get(log.blockHash),
       ...describeEvent(log),
     }));
 }

@@ -28,6 +28,14 @@ export default defineConfig({
     },
   },
   networks: {
+    node: {
+      type: "edr-simulated",
+      chainType: "l1",
+      mining: {
+        auto: false,
+        interval: 1_000,
+      },
+    },
     localhost: {
       type: "http",
       chainType: "l1",

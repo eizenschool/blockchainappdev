@@ -98,6 +98,7 @@ function App() {
   const [history, setHistory] = useState([]);
   const [carrierStats, setCarrierStats] = useState(EMPTY_CARRIER_STATS);
   const [chainTimestamp, setChainTimestamp] = useState(0);
+  const [wallClockTimestamp, setWallClockTimestamp] = useState(() => Math.floor(Date.now() / 1000));
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
   const [proofCodeFeedback, setProofCodeFeedback] = useState(null);
@@ -116,6 +117,15 @@ function App() {
   const correctNetwork = chainId === LOCAL_CHAIN_ID;
   const role = Number(user?.role ?? 0);
   const navigationTabs = ROLE_TABS[role] ?? PUBLIC_TABS;
+  const effectiveTimestamp = Math.max(chainTimestamp, wallClockTimestamp);
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setWallClockTimestamp(Math.floor(Date.now() / 1000)),
+      1_000,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!navigationTabs.some(({ id: tabId }) => tabId === activeTab)) {
@@ -291,7 +301,7 @@ function App() {
     }
     if (
       !agreementForm.deadline
-      || Math.floor(new Date(agreementForm.deadline).getTime() / 1000) <= chainTimestamp
+      || Math.floor(new Date(agreementForm.deadline).getTime() / 1000) <= effectiveTimestamp
     ) {
       return "Choose a deadline in the future.";
     }
@@ -522,7 +532,7 @@ function App() {
             role={role}
             agreements={agreements}
             carrierStats={carrierStats}
-            chainTimestamp={chainTimestamp}
+            chainTimestamp={effectiveTimestamp}
             onRefresh={refreshBlockchainData}
             onNavigate={setActiveTab}
           />
@@ -535,7 +545,7 @@ function App() {
           <RoleWorkspaceErrorBoundary resetKey={`${account}:${role}:deliveries`}>
           <CarrierDashboard
             agreements={agreements}
-            chainTimestamp={chainTimestamp}
+            chainTimestamp={effectiveTimestamp}
             busy={busy}
             onRefresh={refreshBlockchainData}
             onAccept={acceptAgreement}
@@ -550,7 +560,7 @@ function App() {
           <section id="panel-approvals" className="tab-panel" role="tabpanel" aria-labelledby="tab-approvals" hidden={activeTab !== "approvals"}>
           <VerifierDashboard
             agreements={agreements}
-            chainTimestamp={chainTimestamp}
+            chainTimestamp={effectiveTimestamp}
             busy={busy}
             onRefresh={refreshBlockchainData}
             onApprove={approveMilestone}
@@ -690,7 +700,7 @@ function App() {
         record={selectedAgreement}
         history={history}
         role={role}
-        chainTimestamp={chainTimestamp}
+        chainTimestamp={effectiveTimestamp}
         busy={busy}
         notice={notice}
         returnFocus={drawerReturnFocus}

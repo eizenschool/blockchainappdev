@@ -45,6 +45,8 @@ npm run frontend:preview
 
 Open `http://127.0.0.1:4173` for the production preview. For active interface development, use `npm run frontend:dev` and open `http://127.0.0.1:5173` instead.
 
+The local demo node mines a lightweight block every second so deadline displays continue to follow wall-clock time even while no transactions are being submitted. After restarting the node, close any old browser tab and open a fresh production-preview tab to discard provider caches from the previous chain.
+
 In MetaMask, add RPC URL `http://127.0.0.1:8545` with chain ID `31337`. Import test accounts only from the currently running Hardhat node. Those development keys are public and must never hold real assets.
 
 Redeploy whenever the contract changes or the local node restarts. Deployment regenerates `frontend/src/contracts/deployment.json`, including the address and ABI; refresh the interface afterward.

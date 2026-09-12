@@ -66,7 +66,10 @@ export function explainWalletError(error) {
   const rawMessage =
     error?.revert?.name ||
     error?.shortMessage ||
+    error?.info?.error?.data?.message ||
     error?.info?.error?.message ||
+    error?.error?.data?.message ||
+    error?.data?.message ||
     error?.reason ||
     error?.message ||
     "The transaction could not be completed.";
