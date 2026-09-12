@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, id, isAddress, parseEther } from "ethers";
 import AppNavigation from "./components/AppNavigation.jsx";
 import AgreementDetailsDrawer from "./components/AgreementDetailsDrawer.jsx";
@@ -6,9 +6,10 @@ import AgreementTable from "./components/AgreementTable.jsx";
 import CarrierDashboard from "./components/CarrierDashboard.jsx";
 import { Guide } from "./components/EducationViews.jsx";
 import OverviewDashboard from "./components/OverviewDashboard.jsx";
+import RoleWorkspaceErrorBoundary from "./components/RoleWorkspaceErrorBoundary.jsx";
 import VerifierDashboard from "./components/VerifierDashboard.jsx";
 import { MALAYSIA_LOCATIONS, generateProofCodes } from "./lib/agreementForm.js";
-import { loadAgreementHistory } from "./lib/history.js";
+import { EMPTY_CARRIER_STATS, readContractSnapshot } from "./lib/contractData.js";
 import {
   LOCAL_CHAIN_ID,
   createContract,
@@ -95,11 +96,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [agreements, setAgreements] = useState([]);
   const [history, setHistory] = useState([]);
-  const [carrierStats, setCarrierStats] = useState({
-    verifiedMilestones: 0n,
-    completedAgreements: 0n,
-    expiredFundedAgreements: 0n,
-  });
+  const [carrierStats, setCarrierStats] = useState(EMPTY_CARRIER_STATS);
   const [chainTimestamp, setChainTimestamp] = useState(0);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
@@ -110,6 +107,8 @@ function App() {
   const [visibleAgreementCount, setVisibleAgreementCount] = useState(10);
   const [selectedAgreementId, setSelectedAgreementId] = useState(null);
   const [drawerReturnFocus, setDrawerReturnFocus] = useState(null);
+  const [dataStatus, setDataStatus] = useState("idle");
+  const dataRequestId = useRef(0);
   const closeAgreementDrawer = useCallback(() => setSelectedAgreementId(null), []);
 
   const walletInstalled = hasWallet();
@@ -130,64 +129,65 @@ function App() {
     setVisibleAgreementCount(10);
   }, [account]);
 
-  const loadContractData = useCallback(async (activeContract, activeAccount) => {
-    const latestBlock = await activeContract.runner.provider.getBlock("latest");
-    setChainTimestamp(Number(latestBlock.timestamp));
-    const nextUser = await activeContract.getUser(activeAccount);
-    setUser(nextUser);
+  const clearContractData = useCallback(() => {
+    setContract(null);
+    setUser(null);
+    setAgreements([]);
+    setHistory([]);
+    setChainTimestamp(0);
+    setCarrierStats(EMPTY_CARRIER_STATS);
+    setDataStatus("idle");
+  }, []);
 
-    if (Number(nextUser.role) === ROLES.NONE) {
-      setAgreements([]);
-      setHistory([]);
-      setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
-      return;
-    }
+  const loadContractData = useCallback(async (activeContract, activeAccount, existingRequestId) => {
+    const requestId = existingRequestId ?? ++dataRequestId.current;
+    setDataStatus("loading");
 
-    const agreementIds = await activeContract.getAgreementIds(activeAccount);
-    const records = await Promise.all(
-      [...agreementIds].reverse().map(async (agreementId) => {
-        const [agreement, pickup, delivery] = await Promise.all([
-          activeContract.getAgreement(agreementId),
-          activeContract.getMilestone(agreementId, 0),
-          activeContract.getMilestone(agreementId, 1),
-        ]);
-        return { agreement, pickup, delivery };
-      }),
-    );
-    setAgreements(records);
-    setHistory(await loadAgreementHistory(activeContract, agreementIds));
-    if (Number(nextUser.role) === ROLES.CARRIER) {
-      setCarrierStats(await activeContract.getCarrierStats(activeAccount));
-    } else {
-      setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
+    try {
+      const snapshot = await readContractSnapshot(activeContract, activeAccount);
+      if (requestId !== dataRequestId.current) return { applied: false, warnings: [] };
+
+      setUser(snapshot.user);
+      setAgreements(snapshot.agreements);
+      setHistory(snapshot.history);
+      setCarrierStats(snapshot.carrierStats);
+      setChainTimestamp(snapshot.chainTimestamp);
+      setDataStatus(snapshot.warnings.length ? "warning" : "ready");
+      return { applied: true, warnings: snapshot.warnings };
+    } catch (error) {
+      if (requestId !== dataRequestId.current) return { applied: false, warnings: [] };
+      setDataStatus("error");
+      throw error;
     }
   }, []);
 
   const syncWallet = useCallback(
     async ({ requestAccounts = false } = {}) => {
+      const requestId = ++dataRequestId.current;
       try {
         const wallet = await readWalletState({ requestAccounts });
+        if (requestId !== dataRequestId.current) return;
         setAccount(wallet.account);
         setChainId(wallet.chainId);
 
         if (!wallet.account || wallet.chainId !== LOCAL_CHAIN_ID || !deploymentReady) {
-          setContract(null);
-          setUser(null);
-          setAgreements([]);
-          setHistory([]);
-          setChainTimestamp(0);
-          setCarrierStats({ verifiedMilestones: 0n, completedAgreements: 0n, expiredFundedAgreements: 0n });
+          clearContractData();
           return;
         }
 
         const nextContract = await createContract(wallet.provider, wallet.account);
+        if (requestId !== dataRequestId.current) return;
         setContract(nextContract);
-        await loadContractData(nextContract, wallet.account);
+        const result = await loadContractData(nextContract, wallet.account, requestId);
+        if (result.applied && result.warnings.length) {
+          setNotice({ type: "warning", text: result.warnings.join(" ") });
+        }
       } catch (error) {
+        if (requestId !== dataRequestId.current) return;
         setNotice({ type: "error", text: explainWalletError(error) });
       }
     },
-    [deploymentReady, loadContractData],
+    [clearContractData, deploymentReady, loadContractData],
   );
 
   useEffect(() => {
@@ -211,14 +211,44 @@ function App() {
       const transaction = await action();
       setNotice({ type: "pending", text: "Transaction submitted. Waiting for confirmation…" });
       await transaction.wait();
-      await loadContractData(contract, account);
-      setNotice({ type: "success", text: successMessage });
+      try {
+        const result = await loadContractData(contract, account);
+        if (!result.applied) return false;
+        setNotice({
+          type: result.warnings.length ? "warning" : "success",
+          text: result.warnings.length
+            ? `${successMessage} ${result.warnings.join(" ")}`
+            : successMessage,
+        });
+      } catch {
+        setNotice({
+          type: "warning",
+          text: `${successMessage} Refresh the page to reload the latest blockchain data.`,
+        });
+      }
       return true;
     } catch (error) {
       setNotice({ type: "error", text: explainWalletError(error) });
       return false;
     } finally {
       setBusy("");
+    }
+  };
+
+  const refreshBlockchainData = async () => {
+    if (!contract || !account) return false;
+    setNotice({ type: "pending", text: "Refreshing blockchain data…" });
+    try {
+      const result = await loadContractData(contract, account);
+      if (!result.applied) return false;
+      setNotice({
+        type: result.warnings.length ? "warning" : "success",
+        text: result.warnings.length ? result.warnings.join(" ") : "Blockchain data refreshed.",
+      });
+      return true;
+    } catch (error) {
+      setNotice({ type: "error", text: explainWalletError(error) });
+      return false;
     }
   };
 
@@ -408,7 +438,7 @@ function App() {
 
       <AppNavigation activeTab={activeTab} onChange={setActiveTab} tabs={navigationTabs} />
 
-      <main id="top">
+      <main id="top" aria-busy={dataStatus === "loading"}>
         {notice && activeTab !== "overview" && <div className={`notice notice-${notice.type} global-notice`} role="status">{notice.text}</div>}
         <section
           id="panel-overview"
@@ -486,29 +516,33 @@ function App() {
         )}
 
         {contract && user && role !== ROLES.NONE && (
+          <RoleWorkspaceErrorBoundary resetKey={`${account}:${role}:overview`}>
           <OverviewDashboard
             user={user}
             role={role}
             agreements={agreements}
             carrierStats={carrierStats}
             chainTimestamp={chainTimestamp}
-            onRefresh={() => loadContractData(contract, account)}
+            onRefresh={refreshBlockchainData}
             onNavigate={setActiveTab}
           />
+          </RoleWorkspaceErrorBoundary>
         )}
         </section>
 
         {contract && role === ROLES.CARRIER && (
           <section id="panel-deliveries" className="tab-panel" role="tabpanel" aria-labelledby="tab-deliveries" hidden={activeTab !== "deliveries"}>
+          <RoleWorkspaceErrorBoundary resetKey={`${account}:${role}:deliveries`}>
           <CarrierDashboard
             agreements={agreements}
             chainTimestamp={chainTimestamp}
             busy={busy}
-            onRefresh={() => loadContractData(contract, account)}
+            onRefresh={refreshBlockchainData}
             onAccept={acceptAgreement}
             onSubmitEvidence={submitMilestoneEvidence}
             onRefund={refundAgreement}
           />
+          </RoleWorkspaceErrorBoundary>
           </section>
         )}
 
@@ -518,7 +552,7 @@ function App() {
             agreements={agreements}
             chainTimestamp={chainTimestamp}
             busy={busy}
-            onRefresh={() => loadContractData(contract, account)}
+            onRefresh={refreshBlockchainData}
             onApprove={approveMilestone}
             onRefund={refundAgreement}
           />
@@ -627,6 +661,7 @@ function App() {
           aria-labelledby="tab-agreements"
           hidden={activeTab !== "agreements"}
         >
+          <RoleWorkspaceErrorBoundary resetKey={`${account}:${role}:agreements`}>
           {contract && role !== ROLES.NONE && (
             <AgreementTable
               agreements={agreements}
@@ -637,6 +672,7 @@ function App() {
               onView={(record, trigger) => { setSelectedAgreementId(record.agreement.id.toString()); setDrawerReturnFocus(trigger); }}
             />
           )}
+          </RoleWorkspaceErrorBoundary>
         </section>
 
         <section

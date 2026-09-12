@@ -90,6 +90,7 @@ h1 span { color: var(--forest); }
 .notice-success { color: #185e3d; background: #e3f6ec; border-color: #bde6cf; }
 .notice-error { color: #8f2c2c; background: #fbe8e8; border-color: #efc4c4; }
 .notice-pending { color: #64531a; background: #fff6d7; border-color: #ecd98b; }
+.notice-warning { color: #704c18; background: #fff0d8; border-color: #eac58a; }
 
 .button { border: 0; border-radius: 8px; padding: 12px 17px; font-weight: 800; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
 .button:hover:not(:disabled) { transform: translateY(-1px); }
@@ -180,6 +181,10 @@ h1 span { color: var(--forest); }
 .overview-actions p:not(.eyebrow) { margin: 0; color: var(--muted); }
 .overview-buttons { display: flex; flex: none; gap: 10px; }
 .reputation-summary { padding-top: 2px; }
+.workspace-error { margin: 52px 0 24px; padding: 36px; }
+.workspace-error h2 { margin-bottom: 10px; }
+.workspace-error > p:not(.eyebrow) { max-width: 650px; color: var(--muted); line-height: 1.6; }
+.workspace-error > div { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 .create-page { max-width: 760px; margin: 0 auto; padding: 52px 0 24px; }
 .action-page-heading { margin-bottom: 24px; }
 .action-page-heading h1 { margin-bottom: 10px; font-size: clamp(38px, 5vw, 56px); }

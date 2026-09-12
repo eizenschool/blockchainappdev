@@ -69,12 +69,27 @@ export default function AgreementDetailsDrawer({
   const expired = chainTimestamp > Number(agreement.deadline);
   const agreementHistory = history.filter((entry) => entry.agreementId.toString() === agreement.id.toString());
 
+  const closeFromPointer = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  };
+
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside ref={drawerPanel} className="agreement-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
         <header className="drawer-header">
           <div><span className="agreement-id">Agreement #{agreement.id.toString()}</span><h2 id="drawer-title">{agreement.cargo}</h2></div>
-          <button ref={closeButton} className="drawer-close" type="button" onClick={onClose} aria-label="Close agreement details">×</button>
+          <button
+            ref={closeButton}
+            className="drawer-close"
+            type="button"
+            onPointerDown={closeFromPointer}
+            onClick={onClose}
+            aria-label="Close agreement details"
+          >
+            ×
+          </button>
         </header>
 
         <div className="drawer-scroll">

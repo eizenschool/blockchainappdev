@@ -14,8 +14,10 @@
     "deploy:local": "hardhat run scripts/deploy-local.js --build-profile production --network localhost",
     "demo:local": "hardhat run scripts/verify-local-flow.js --network localhost",
     "frontend:dev": "npm run dev --workspace frontend",
+    "frontend:test": "npm run test --workspace frontend",
     "frontend:build": "npm run build --workspace frontend",
-    "frontend:lint": "npm run lint --workspace frontend"
+    "frontend:lint": "npm run lint --workspace frontend",
+    "frontend:preview": "npm run preview --workspace frontend -- --host 127.0.0.1"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.6.1"

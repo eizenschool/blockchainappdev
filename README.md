@@ -22,6 +22,7 @@ Requirements: Node.js 22.13 or newer, npm, Git, and MetaMask.
 ```bash
 npm ci
 npm test
+npm run frontend:test
 npm run frontend:lint
 npm run frontend:build
 ```
@@ -37,9 +38,12 @@ npm run node
 # terminal 2
 npm run deploy:local
 
-# terminal 3
-npm run frontend:dev
+# terminal 3 (recommended for demonstrations)
+npm run frontend:build
+npm run frontend:preview
 ```
+
+Open `http://127.0.0.1:4173` for the production preview. For active interface development, use `npm run frontend:dev` and open `http://127.0.0.1:5173` instead.
 
 In MetaMask, add RPC URL `http://127.0.0.1:8545` with chain ID `31337`. Import test accounts only from the currently running Hardhat node. Those development keys are public and must never hold real assets.
 
